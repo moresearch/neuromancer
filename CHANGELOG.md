@@ -1,3 +1,9 @@
+# Unreleased:
+ - Renamed the program from tt to nm.
+ - Added the Colemak-DH (matrix) keyboard display. The key for the next
+   character is highlighted in green and wrong keys flash red.
+ - Configuration and state now live in `~/.nm` and `~/.local/share/nm`.
+
 # 0.4.2:
   Added -notheme, -blockcursor and -bold.
 

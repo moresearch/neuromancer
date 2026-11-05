@@ -20,9 +20,9 @@ func init() {
 	}
 
 	if data, ok = os.LookupEnv("XDG_DATA_HOME"); ok {
-		data = filepath.Join(data, "/tt")
+		data = filepath.Join(data, "/nm")
 	} else {
-		data = filepath.Join(home, "/.local/share/tt")
+		data = filepath.Join(home, "/.local/share/nm")
 	}
 
 	os.MkdirAll(data, 0700)

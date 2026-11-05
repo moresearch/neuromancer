@@ -1,17 +1,17 @@
-% tt(1)
+% nm(1)
 
 # NAME
 
-tt - A terminal based typing test
+nm - A terminal based typing test for Colemak-DH
 
 # SYNOPSIS
 
-usage: tt \[OPTION\]... \[FILE\]
+usage: nm \[OPTION\]... \[FILE\]
 
 # DESCRIPTION
 
-  By default tt creates a test consisting of 50 randomly generated words from
-  the top 1000 words in the English language. If provided with a path, tt will
+  By default nm creates a test consisting of 50 randomly generated words from
+  the top 1000 words in the English language. If provided with a path, nm will
   use the given file as input treating each paragraph as a separate segment of
   the test. The program will automatically keep track of your position in the
   file so subsequent invocations on the same path will place you at the most
@@ -20,6 +20,10 @@ usage: tt \[OPTION\]... \[FILE\]
   Arbitrary text can also be piped directly into the program to create a custom
   test. Each paragraph of the input is treated as a segment unless '-multi' is
   supplied in which case each paragraph is treated as a separate test. 
+
+  While a test is running the Colemak-DH (matrix) layout is shown at the bottom
+  of the screen. The key producing the next character is highlighted in green.
+  Pressing the wrong key highlights that key's location in red.
 
 # OPTIONS
 
@@ -152,25 +156,25 @@ are determined exclusively by the input.
 Creates a series of tests each consisting of a random quote drawn from the
 builtin quote file 'en'.
 ```
-tt -quotes en
+nm -quotes en
 ```
 
 Creates a series of tests each consisting of 10 random words drawn from
 words.txt
 ```
-tt -words words.txt -n 10
+nm -words words.txt -n 10
 ```
 
 Starts a sequence of tests in which each test consists of a paragraph from war
 and peace starting with paragraph 1.
 ```
-tt ~/war_and_peace.txt -start 1
+nm ~/war_and_peace.txt -start 1
 ```
 
 Produces a test consisting of 40 random words draw from 
-the system dictionary (similar to 'tt -n 40').
+the system dictionary (similar to 'nm -n 40').
 ```
-shuf -n 40 /usr/share/dict/words|tt
+shuf -n 40 /usr/share/dict/words|nm
 ```
 
 Starts a test consisting of two randomly drawn quotes from api.quotable.io and
@@ -178,13 +182,13 @@ prints the output of each test to STDOUT in csv format.
 ```
 curl https://api.quotable.io/quotes|\
     jq '[.results[]|.text=.content|.attribution=.author][:2]'|\
-    tt -quotes - -norreport -csv
+    nm -quotes - -norreport -csv
 ```
 
-Starts a new typing test which uses the tt source as input:
+Starts a new typing test which uses the nm source as input:
 
 ```
-curl -LsS https://raw.githubusercontent.com/lemnos/tt/master/src/tt.go | head -n 20 | tt -noskip -raw
+curl -LsS https://raw.githubusercontent.com/moresearch/neuromancer/master/src/nm.go | head -n 20 | nm -noskip -raw
 ```
 
 Modify to taste.
@@ -195,15 +199,15 @@ Modify to taste.
   not exist, the following directories are searched for a file with the given
   name before falling back to internal resources:
 
-  ~/.tt/words\
-  ~/.tt/themes\
-  /etc/tt/words\
-  /etc/tt/themes
+  ~/.nm/words\
+  ~/.nm/themes\
+  /etc/nm/words\
+  /etc/nm/themes
 
 # KEYS
 
   **esc: ** Restarts the test\
-  **C-c: ** Terminates tt\
+  **C-c: ** Terminates nm\
   **C-backspace: ** Deletes the previous word\
   **right** Move to the next test.\
   **left** Move to the previous test.
@@ -216,7 +220,7 @@ Aetnaeus (aetnaeus@protonmail.com)
 
 ## Project Page
 
-    https://github.com/lemnos/tt
+    https://github.com/moresearch/neuromancer
 
 # LICENSE
 

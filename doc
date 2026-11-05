@@ -1,4 +1,4 @@
-usage: tt [options] [file]
+usage: nm [options] [file]
 
 Modes
     -words  WORDFILE    Specifies the file from which words are randomly 
@@ -21,6 +21,10 @@ Aesthetics
     -theme THEMEFILE    The theme to use. 
     -w                  The maximum line length in characters. This option is 
                         ignored if -raw is present.
+
+    The Colemak-DH (matrix) layout is shown at the bottom of the screen. The
+    key producing the next character is highlighted in green, and the most
+    recent wrong key is highlighted in red.
 
 Test Parameters
     -t SECONDS          Terminate the test after the given number of seconds.

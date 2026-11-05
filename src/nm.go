@@ -161,7 +161,7 @@ func createTyper(scr tcell.Screen, bold bool, themeName string) *typer {
 	return NewTyper(scr, bold, fgcol, bgcol, hicol, hicol2, hicol3, errcol)
 }
 
-var usage = `usage: tt [options] [file]
+var usage = `usage: nm [options] [file]
 
 Modes
     -words  WORDFILE    Specifies the file from which words are randomly
@@ -189,6 +189,11 @@ Aesthetics
     -blockcursor        Use the default cursor style.
     -bold               Embolden typed text.
                         ignored if -raw is present.
+
+The Colemak-DH (matrix) layout is shown at the bottom of the screen. The key
+producing the next character is highlighted in green; pressing a wrong key
+highlights that key's location in red.
+
 Test Parameters
     -t SECONDS          Terminate the test after the given number of seconds.
     -noskip             Disable word skipping when space is pressed.
@@ -304,7 +309,7 @@ func main() {
 	}
 
 	if versionFlag {
-		fmt.Fprintf(os.Stderr, "tt version 0.4.2\n")
+		fmt.Fprintf(os.Stderr, "nm version 0.4.2\n")
 		os.Exit(1)
 	}
 

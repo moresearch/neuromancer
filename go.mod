@@ -1,4 +1,4 @@
-module tt
+module nm
 
 go 1.17
 

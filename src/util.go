@@ -19,8 +19,8 @@ func init() {
 	home, _ := os.LookupEnv("HOME")
 
 	CONFIG_DIRS = []string{
-		filepath.Join(home, ".tt"),
-		"/etc/tt",
+		filepath.Join(home, ".nm"),
+		"/etc/nm",
 	}
 }
 

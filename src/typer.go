@@ -46,6 +46,10 @@ type typer struct {
 	incorrectStyle      tcell.Style
 	correctStyle        tcell.Style
 	defaultStyle        tcell.Style
+
+	// Most recent incorrect key, highlighted red on the keyboard matrix.
+	wrongKey   rune
+	wrongUntil time.Time
 }
 
 func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
@@ -55,7 +59,7 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 		Background(bgcol)
 
 	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
-	//Will fail on windows, but tt is still mostly usable via tcell
+	//Will fail on windows, but nm is still mostly usable via tcell
 	if err != nil {
 		tty = ioutil.Discard
 	}
@@ -163,7 +167,18 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	sw, sh := scr.Size()
 	nc, nr := calcStringDimensions(s)
 	x := (sw - nc) / 2
-	y := (sh - nr) / 2
+
+	availH := sh
+	if _, top, ok := t.keyboardVisible(); ok {
+		availH = top - 1
+	}
+	y := (availH - nr) / 2
+	if y < 0 {
+		y = 0
+	}
+
+	t.wrongKey = 0
+	t.wrongUntil = time.Time{}
 
 	if !t.BlockCursor {
 		t.tty.Write([]byte("\033[5 q"))
@@ -244,6 +259,12 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 		aw, ah := calcStringDimensions(attribution)
 		drawString(t.Scr, x+nc-aw, y+nr+1, attribution, -1, t.defaultStyle)
+
+		var target rune
+		if idx < len(text) {
+			target = text[idx]
+		}
+		t.drawKeyboard(target)
 
 		if timeLimit != -1 && !startTime.IsZero() {
 			remaining := timeLimit - time.Now().Sub(startTime)
@@ -388,6 +409,9 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 							idx++
 						}
 					} else {
+						if ev.Rune() != text[idx] {
+							t.markWrong(ev.Rune())
+						}
 						typed[idx] = ev.Rune()
 						idx++
 					}

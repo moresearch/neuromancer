@@ -1,32 +1,14 @@
 # What
 
-A terminal based typing test.
+`nm` is a terminal based typing test for the Colemak-DH keyboard layout.
+
+While a test is running the Colemak-DH (matrix) layout is shown at the bottom of
+the screen. The key which produces the next character is highlighted in green,
+and pressing the wrong key flashes that key's location in red.
 
 ![](demo.gif)
 
 # Installation
-
-## Linux
-
-```
-sudo curl -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt-linux -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
-sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt.1.gz
-```
-
-## OSX
-
-```
-mkdir -p /usr/local/bin /usr/local/share/man/man1 # Usually created by brew
-
-sudo curl -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
-sudo curl -o /usr/local/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt.1.gz
-```
-
-## Uninstall
-
-```
-sudo rm /usr/local/bin/tt /usr/share/man/man1/tt.1.gz
-```
 
 ## From source
 
@@ -35,9 +17,15 @@ sudo rm /usr/local/bin/tt /usr/share/man/man1/tt.1.gz
 sudo apt install golang
 
 # clone and make
-git clone https://github.com/lemnos/tt
-cd tt
+git clone https://github.com/moresearch/neuromancer
+cd neuromancer
 make && sudo make install
+```
+
+## Uninstall
+
+```
+sudo rm /usr/local/bin/nm /usr/share/man/man1/nm.1.gz
 ```
 
 Best served on a terminal with truecolor and cursor shape support (e.g kitty, iterm)
@@ -47,7 +35,7 @@ Best served on a terminal with truecolor and cursor shape support (e.g kitty, it
 By default 50 words from the top 1000 words in the English language are used to
 constitute the test. Custom text can be supplied by piping arbitrary text to the
 program. Each paragraph in the input is shown as a separate segment of the text.
-See `man tt` or `man.md` for a complete description and a comprehensive set of
+See `man nm` or `man.md` for a complete description and a comprehensive set of
 options.
 
 ## Keys
@@ -59,27 +47,27 @@ options.
 
 ## Examples
 
- - `tt -quotes en` Starts quote mode with the builtin quote list 'en'.
- - `tt -n 10 -g 5` produces a test consisting of 50 randomly drawn words in 5 groups of 10 words each.
- - `tt -t 10` starts a timed test lasting 10 seconds.
- - `tt -theme gruvbox` Starts tt with the gruvbox theme.
+ - `nm -quotes en` Starts quote mode with the builtin quote list 'en'.
+ - `nm -n 10 -g 5` produces a test consisting of 50 randomly drawn words in 5 groups of 10 words each.
+ - `nm -t 10` starts a timed test lasting 10 seconds.
+ - `nm -theme gruvbox` Starts nm with the gruvbox theme.
 
-`tt` is designed to be easily scriptable and integrate nicely with
+`nm` is designed to be easily scriptable and integrate nicely with
 other *nix tools. With a little shell scripting most features the user can
 conceive of should be possible to implement. Below are some simple examples of
 what can be achieved.
 
- - `shuf -n 40 /usr/share/dict/words|tt`  Produces a test consisting of 40 random words drawn from your system's dictionary.
- - `curl http://api.quotable.io/random|jq '[.text=.content|.attribution=.author]'|tt -quotes -` Produces a test consisting of a random quote.
- - `alias ttd='tt -csv >> ~/wpm.csv'` Creates an alias called ttd which keeps a log of progress in your home directory`.
+ - `shuf -n 40 /usr/share/dict/words|nm`  Produces a test consisting of 40 random words drawn from your system's dictionary.
+ - `curl http://api.quotable.io/random|jq '[.text=.content|.attribution=.author]'|nm -quotes -` Produces a test consisting of a random quote.
+ - `alias nmd='nm -csv >> ~/wpm.csv'` Creates an alias called nmd which keeps a log of progress in your home directory`.
 
-The default behaviour is equivalent to `tt -n 50`.
+The default behaviour is equivalent to `nm -n 50`.
 
 See `-help` for an exhaustive list of options.
 
 ## Configuration
 
-Custom themes and word lists can be defined in `~/.tt/themes` and `~/.tt/words`
+Custom themes and word lists can be defined in `~/.nm/themes` and `~/.nm/words`
 and used in conjunction with the `-theme` and `-words` flags. A list of
 preloaded themes and word lists can be found in `words/` and `themes/` and are
 accessible by default using the respective flags.
