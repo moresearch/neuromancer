@@ -1523,7 +1523,10 @@ func (t *typer) drawVilKeyboard(target rune) {
 	if preview {
 		hintText = "preview: " + kb.layerName(layer)
 	}
-	drawHintLine(t.Scr, hintY, x0, width, hintText, t.defaultStyle)
+	t.hintText = hintText
+	if t.chatsubo == nil {
+		drawHintLine(t.Scr, hintY, x0, width, hintText, t.defaultStyle)
+	}
 }
 
 func (kb *vilKeyboard) drawHalf(scr tcell.Screen, layer, matrixRow, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused, blink bool, def tcell.Style) {

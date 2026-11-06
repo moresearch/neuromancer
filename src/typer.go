@@ -58,6 +58,7 @@ type typer struct {
 	chatsubo     *chatsubo
 	chatTop      int
 	chatPlaced   bool
+	hintText     string
 }
 
 func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
@@ -197,10 +198,9 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	}
 	chatsuboAbove := t.chatsubo != nil && kbVisible && kbTop >= chatsuboMinAbove
 	if chatsuboAbove {
-		// Reserve the three rows used by the Chatsubo box between the text
-		// and the keyboard. Leave one more row when the timer is shown below
-		// the text.
-		availH = kbTop - 4
+		// Reserve the Chatsubo box between the text and the keyboard. Leave
+		// one more row when the timer is shown below the text.
+		availH = kbTop - chatsuboBoxHeight - 1
 		if timeLimit != -1 {
 			availH--
 		}

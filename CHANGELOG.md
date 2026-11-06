@@ -4,6 +4,8 @@
    bonus.
  - Moved the Chatsubo box between the practice text and the keyboard, and
    reserve enough rows that text, attribution, and timers do not overlap it.
+   The box now shows the layer/shift guidance line first, then the model
+   commentary.
  - Book mode now shows the source filename below the paragraph.
  - Fixed long unbroken tokens overflowing the configured practice width.
  - Fixed `-gen` leaving thinking enabled on reasoning models.

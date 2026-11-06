@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -299,11 +300,42 @@ func drawKBButton(scr tcell.Screen, x, y, width, height int, label, top string, 
 // drawKeyboard renders the keyboard matrix, marking the key needed for the
 // next character in green and the most recent wrong key in red.
 func (t *typer) drawKeyboard(target rune) {
+	t.hintText = ""
 	if t.vil != nil {
 		t.drawVilKeyboard(target)
 		return
 	}
 	t.drawBuiltinKeyboard(target)
+}
+
+// builtinHint describes the key needed for target on the built-in Colemak-DH
+// matrix. The Chatsubo box uses this guidance when no .vil is loaded.
+func builtinHint(target rune) string {
+	if target == 0 || target == '\n' {
+		return ""
+	}
+	if target == ' ' {
+		return "press SPACE"
+	}
+
+	row, col, ok := kbFind(target)
+	if !ok {
+		return ""
+	}
+
+	shift := false
+	if target >= 'A' && target <= 'Z' {
+		shift = true
+	}
+	if _, ok := kbShifted[target]; ok {
+		shift = true
+	}
+
+	key := kbRows[row].keys[col]
+	if shift {
+		return fmt.Sprintf("hold SHIFT + press %c", key)
+	}
+	return fmt.Sprintf("press %c", key)
 }
 
 const (
@@ -367,6 +399,8 @@ func kbBuiltinTargetHome(row, col int) (int, int, bool) {
 }
 
 func (t *typer) drawBuiltinKeyboard(target rune) {
+	t.hintText = builtinHint(target)
+
 	sw, sh := t.Scr.Size()
 	m, ok := kbBuiltinMetrics(sw, sh)
 	if !ok {

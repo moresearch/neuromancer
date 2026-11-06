@@ -9,9 +9,13 @@ import (
 	"github.com/gdamore/tcell"
 )
 
-// chatsuboMinAbove is the minimum keyboard top row where a three-row box
+// chatsuboMinAbove is the minimum keyboard top row where a four-row box
 // plus attribution/timer can fit between the text and the keyboard.
 const chatsuboMinAbove = 8
+
+// chatsuboBoxHeight includes the border, guidance line, commentary line, and
+// bottom border.
+const chatsuboBoxHeight = 4
 
 type chatsuboSnapshot struct {
 	Seconds  int
@@ -190,9 +194,9 @@ func (t *typer) maybeChatsubo(text, typed []rune, idx int) {
 	go c.request(snap, t.Scr)
 }
 
-// chatsuboPlacement centers the three-row Chatsubo box in the gap between
-// the text block and the keyboard. It returns -1 when there is not enough
-// room to draw the box without overlapping the text.
+// chatsuboPlacement centers the Chatsubo box in the gap between the text
+// block and the keyboard. It returns -1 when there is not enough room to draw
+// the box without overlapping the text.
 func (t *typer) chatsuboPlacement(textY, textLines int, attribution string, timeLimit time.Duration) int {
 	_, sh := t.Scr.Size()
 	_, attribLines := calcStringDimensions(attribution)
@@ -212,9 +216,8 @@ func (t *typer) chatsuboPlacement(textY, textLines int, attribution string, time
 		top = kt
 	}
 
-	const boxHeight = 3
 	gapTop := blockBottom + 1
-	maxTop := top - boxHeight
+	maxTop := top - chatsuboBoxHeight
 	if maxTop < gapTop || maxTop < 1 {
 		return -1
 	}
@@ -239,7 +242,7 @@ func (t *typer) drawChatsubo() {
 	if width > 72 {
 		width = 72
 	}
-	if width < 30 || sh < 6 {
+	if width < 30 || sh < chatsuboBoxHeight+1 {
 		return
 	}
 	x := (sw - width) / 2
@@ -247,15 +250,15 @@ func (t *typer) drawChatsubo() {
 	// Prefer the gap computed for the current text block. When drawing
 	// without a started segment (for example in tests), fall back to sitting
 	// directly above the keyboard, or at the bottom when no keyboard fits.
-	y := sh - 3
+	y := sh - chatsuboBoxHeight
 	if _, top, ok := t.keyboardVisible(); ok {
-		y = top - 3
+		y = top - chatsuboBoxHeight
 	}
 	if t.chatPlaced {
 		if t.chatTop < 0 {
 			// Not enough room above the keyboard; use the keyboard's
 			// bottom padding so the box stays visible.
-			y = sh - 3
+			y = sh - chatsuboBoxHeight
 		} else {
 			y = t.chatTop
 		}
@@ -272,18 +275,24 @@ func (t *typer) drawChatsubo() {
 	}
 
 	border := t.defaultStyle.Foreground(tcell.ColorTeal)
+	guideStyle := t.defaultStyle.Foreground(tcell.ColorTeal).Bold(true)
 	label := " chatsubo "
 	top := "╭" + label + strings.Repeat("─", width-2-len([]rune(label))) + "╮"
 	drawString(t.Scr, x, y, top, -1, border)
 
 	inner := width - 2
-	r := []rune(strings.Join(strings.Fields(comment), " "))
-	if len(r) > inner-2 {
-		r = r[:inner-2]
+	drawBoxLine := func(row int, text string, style tcell.Style) {
+		r := []rune(strings.Join(strings.Fields(text), " "))
+		if len(r) > inner-2 {
+			r = r[:inner-2]
+		}
+		line := "│ " + string(r) + strings.Repeat(" ", inner-2-len(r)) + " │"
+		drawString(t.Scr, x, row, line, -1, style)
 	}
-	line := "│ " + string(r) + strings.Repeat(" ", inner-2-len(r)) + " │"
-	drawString(t.Scr, x, y+1, line, -1, t.defaultStyle)
+
+	drawBoxLine(y+1, t.hintText, guideStyle)
+	drawBoxLine(y+2, comment, t.defaultStyle)
 
 	bottom := "╰" + strings.Repeat("─", width-2) + "╯"
-	drawString(t.Scr, x, y+2, bottom, -1, border)
+	drawString(t.Scr, x, y+chatsuboBoxHeight-1, bottom, -1, border)
 }

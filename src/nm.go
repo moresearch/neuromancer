@@ -637,7 +637,7 @@ func main() {
 		// present, the attribution/timer line below the text.
 		maxLines := top - 2
 		if chatsuboMode && kbAbove {
-			maxLines = top - 5
+			maxLines = top - chatsuboBoxHeight - 2
 			if timeout != -1 {
 				maxLines--
 			}
