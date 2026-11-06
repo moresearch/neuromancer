@@ -25,7 +25,7 @@ func init() {
 }
 
 type cell struct {
-	c	  rune
+	c     rune
 	style tcell.Style
 }
 
@@ -70,10 +70,85 @@ func wordWrapBytes(s []byte, n int) {
 
 }
 
+// wordWrap breaks s into lines of at most n characters. It prefers to break at
+// spaces, but long tokens without spaces are hard-wrapped so a line can never
+// exceed n. Newlines in the input are treated as spaces.
 func wordWrap(s string, n int) string {
-	r := []byte(s)
-	wordWrapBytes(r, n)
-	return string(r)
+	if n < 1 {
+		n = 1
+	}
+
+	var b strings.Builder
+	line := make([]rune, 0, n)
+	flush := func() {
+		b.WriteString(string(line))
+		b.WriteByte('\n')
+		line = line[:0]
+	}
+
+	for _, r := range strings.ReplaceAll(s, "\n", " ") {
+		if len(line) < n {
+			line = append(line, r)
+			continue
+		}
+
+		// The line is full. A space at this point is simply replaced by the
+		// line break.
+		if r == ' ' {
+			flush()
+			continue
+		}
+		if line[len(line)-1] == ' ' {
+			b.WriteString(string(line[:len(line)-1]))
+			b.WriteByte('\n')
+			line = line[:0]
+			line = append(line, r)
+			continue
+		}
+
+		lastSpace := -1
+		for i := len(line) - 1; i >= 0; i-- {
+			if line[i] == ' ' {
+				lastSpace = i
+				break
+			}
+		}
+		if lastSpace > 0 {
+			b.WriteString(string(line[:lastSpace]))
+			b.WriteByte('\n')
+			rest := append([]rune(nil), line[lastSpace+1:]...)
+			line = append(rest, r)
+		} else {
+			// A single token is longer than the line: hard-wrap it.
+			flush()
+			line = append(line, r)
+		}
+	}
+
+	b.WriteString(string(line))
+	return b.String()
+}
+
+var whitespaceRegexp = regexp.MustCompile("\\s+")
+
+// trimText wraps s to width and keeps at most maxLines lines. The final line is
+// cut at a word boundary produced by wordWrap. A space is inserted before each
+// line break so the typer treats wrapped lines as part of the same text.
+func trimText(s string, width, maxLines int) string {
+	if width < 1 {
+		width = 1
+	}
+	if maxLines < 1 {
+		maxLines = 1
+	}
+
+	s = whitespaceRegexp.ReplaceAllString(s, " ")
+	wrapped := wordWrap(strings.TrimSpace(s), width)
+	lines := strings.Split(wrapped, "\n")
+	if len(lines) > maxLines {
+		lines = lines[:maxLines]
+	}
+	return strings.Replace(strings.Join(lines, "\n"), "\n", " \n", -1)
 }
 
 func init() {

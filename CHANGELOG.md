@@ -1,4 +1,21 @@
 # Unreleased:
+ - Added `-arcade` galaxy shooter mode. Word-ships fire their letters at you;
+   type a falling letter to shoot it down and clear a ship's whole word for a
+   bonus.
+ - Fixed long unbroken tokens overflowing the configured practice width.
+ - Fixed `-gen` leaving thinking enabled on reasoning models.
+ - Fixed stale Chatsubo statistics after backspacing and zero-length tests.
+ - Added `-books DIR` to practice random paragraphs from local text files.
+ - Added `-gen PROMPT` to generate drills with a local Ollama model, plus
+   `-ollama` and `-model` options. Generated characters are validated against
+   the `.vil` layout.
+ - Wrap practice text to a smaller default width (60 columns) and trim it to
+   the area above the keyboard so long paragraphs cannot overlap the UI.
+ - Added `-chatsubo` and `-chatsubo-every` for live Chatsubo
+   Ollama commentary on the last typing interval. The comment box sits in the
+   bottom padding; thinking models are called with `think:false` so they return
+   text instead of burning the token budget on reasoning.
+ - Documented the remaining Ollama ideas in the README roadmap.
  - Renamed the program from tt to nm.
  - Added the Colemak-DH (matrix) keyboard display. The key for the next
    character is highlighted in green and wrong keys flash red.

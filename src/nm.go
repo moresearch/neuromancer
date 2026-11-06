@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,10 +32,27 @@ func die(format string, args ...interface{}) {
 	if scr != nil {
 		scr.Fini()
 	}
-	fmt.Fprintf(os.Stderr, "ERROR: ")
+	fmt.Fprintf(os.Stderr, "nm: ")
 	fmt.Fprintf(os.Stderr, format, args...)
 	fmt.Fprintf(os.Stderr, "\n")
 	os.Exit(1)
+}
+
+func warnf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "nm: warning: "+format+"\n", args...)
+}
+
+func usageError(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "nm: "+format+"\n", args...)
+	fmt.Fprintln(os.Stderr, "Try 'nm -h' for usage.")
+	os.Exit(2)
+}
+
+func envOr(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
 }
 
 var results []result
@@ -178,6 +195,22 @@ Modes
     -vil-split MODE     Split the Vial matrix into halves: auto, rows, cols
                         or none (default: auto).
     -vil-info           Print the parsed Vial layers and exit.
+    -arcade             Galaxy arcade: word-ships fire letters at you. Type
+                        the falling letters to shoot them down.
+    -books DIR          Practice random paragraphs from .txt/.md/.text/.org
+                        files in DIR.
+
+Ollama (optional)
+    -gen PROMPT         Generate a drill with a local Ollama model. Works with
+                        the built-in Colemak-DH layout; add -vil FILE for
+                        layout-aware drills.
+    -chatsubo           Live typing commentary from a local Ollama model.
+    -model NAME         Model to use (default: auto, prefers qwen).
+                        Env: OLLAMA_MODEL
+    -ollama URL         Ollama API URL (default: http://localhost:11434).
+                        Env: OLLAMA_HOST
+    -chatsubo-every DURATION
+                        Time between comments (default: 2m; e.g. 30s).
 
 Word Mode
     -n GROUPSZ          Sets the number of words which constitute a group.
@@ -193,7 +226,8 @@ File Mode
 Aesthetics
     -showwpm            Display WPM whilst typing.
     -theme THEMEFILE    The theme to use. 
-    -w                  The maximum line length in characters. This option is 
+    -w N                The maximum line length in characters (default: 60).
+                        Ignored if -raw is present.
     -notheme            Attempt to use the default terminal theme. 
                         This may produce odd results depending 
                         on the theme colours.
@@ -232,6 +266,15 @@ Misc
 
 Version
     -v                  Print the current version.
+
+Examples
+    nm
+    nm -arcade
+    nm -arcade -t 180
+    nm -vil ~/sofle.vil
+    nm -gen "home row words"
+    nm -gen "sym layer with HRM shift" -vil ~/sofle.vil
+    nm -chatsubo -model qwen3:0.6b
 `
 
 func saveMistakes(mistakes []mistake) {
@@ -270,11 +313,18 @@ func main() {
 	var layerNames string
 	var vilSplit string
 	var vilInfo bool
+	var booksDir string
+	var genPrompt string
+	var ollamaURL string
+	var ollamaModel string
 
 	var themeName string
 	var showWpm bool
 	var drillMode bool
 	var hrmMode bool
+	var arcadeMode bool
+	var chatsuboMode bool
+	var chatsuboEvery time.Duration
 	var multiMode bool
 	var versionFlag bool
 	var boldFlag bool
@@ -286,7 +336,7 @@ func main() {
 	flag.IntVar(&g, "g", 1, "")
 	flag.IntVar(&startParagraph, "start", -1, "")
 
-	flag.IntVar(&maxLineLen, "w", 80, "")
+	flag.IntVar(&maxLineLen, "w", 60, "")
 	flag.IntVar(&timeout, "t", -1, "")
 
 	flag.BoolVar(&versionFlag, "v", false, "")
@@ -297,10 +347,17 @@ func main() {
 	flag.StringVar(&layerNames, "layernames", "", "")
 	flag.StringVar(&vilSplit, "vil-split", "auto", "")
 	flag.BoolVar(&vilInfo, "vil-info", false, "")
+	flag.StringVar(&booksDir, "books", "", "")
+	flag.StringVar(&genPrompt, "gen", "", "")
+	flag.StringVar(&ollamaURL, "ollama", normalizeOllamaURL(envOr("OLLAMA_HOST", defaultOllamaURL)), "")
+	flag.StringVar(&ollamaModel, "model", envOr("OLLAMA_MODEL", ""), "")
 
 	flag.BoolVar(&showWpm, "showwpm", false, "")
+	flag.BoolVar(&arcadeMode, "arcade", false, "")
 	flag.BoolVar(&drillMode, "drill", false, "")
 	flag.BoolVar(&hrmMode, "hrm", false, "")
+	flag.BoolVar(&chatsuboMode, "chatsubo", false, "")
+	flag.DurationVar(&chatsuboEvery, "chatsubo-every", 2*time.Minute, "")
 	flag.BoolVar(&noSkip, "noskip", false, "")
 	flag.BoolVar(&normalCursor, "blockcursor", false, "")
 	flag.BoolVar(&noBackspace, "nobackspace", false, "")
@@ -321,21 +378,126 @@ func main() {
 	flag.Usage = func() { os.Stdout.Write([]byte(usage)) }
 	flag.Parse()
 
+	set := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
+
 	if listFlag != "" {
+		switch listFlag {
+		case "themes", "quotes", "words":
+		default:
+			usageError("unknown -list type %q (use themes, quotes or words)", listFlag)
+		}
 		prefix := listFlag + "/"
-		for path, _ := range packedFiles {
-			if strings.Index(path, prefix) == 0 {
+		var names []string
+		for path := range packedFiles {
+			if strings.HasPrefix(path, prefix) {
 				_, f := filepath.Split(path)
-				fmt.Println(f)
+				names = append(names, f)
 			}
 		}
-
+		sort.Strings(names)
+		for _, f := range names {
+			fmt.Println(f)
+		}
 		os.Exit(0)
 	}
 
 	if versionFlag {
 		fmt.Fprintf(os.Stderr, "nm version 0.4.2\n")
-		os.Exit(1)
+		os.Exit(0)
+	}
+
+	if n <= 0 {
+		usageError("-n must be a positive number of words (got %d)", n)
+	}
+	if g <= 0 {
+		usageError("-g must be a positive number of groups (got %d)", g)
+	}
+	if maxLineLen < 20 {
+		usageError("-w must be at least 20 columns (got %d)", maxLineLen)
+	}
+	if timeout != -1 && timeout <= 0 {
+		usageError("-t must be a positive number of seconds (got %d)", timeout)
+	}
+	if startParagraph < -1 {
+		usageError("-start must be -1 or a paragraph number (got %d)", startParagraph)
+	}
+	if len(flag.Args()) > 1 {
+		hint := ""
+		for _, a := range flag.Args() {
+			if strings.HasPrefix(a, "-") {
+				hint = "\nHint: flags must appear before positional arguments, and boolean flags like -chatsubo take no value"
+				break
+			}
+		}
+		usageError("expected at most one input file, got %d%s", len(flag.Args()), hint)
+	}
+
+	if vilPath == "" {
+		switch {
+		case set["layernames"] && strings.TrimSpace(layerNames) != "":
+			usageError("-layernames requires -vil FILE")
+		case vilSplit != "auto":
+			usageError("-vil-split requires -vil FILE")
+		case vilInfo:
+			usageError("-vil-info requires -vil FILE")
+		}
+	}
+	if drillMode && vilPath == "" {
+		usageError("-drill requires -vil FILE")
+	}
+	if hrmMode && vilPath == "" {
+		usageError("-hrm requires -vil FILE")
+	}
+
+	var modes []string
+	if arcadeMode {
+		modes = append(modes, "-arcade")
+	}
+	if genPrompt != "" {
+		modes = append(modes, "-gen")
+	}
+	if booksDir != "" {
+		modes = append(modes, "-books")
+	}
+	if drillMode {
+		modes = append(modes, "-drill")
+	}
+	if hrmMode {
+		modes = append(modes, "-hrm")
+	}
+	if wordFile != "" {
+		modes = append(modes, "-words")
+	}
+	if quoteFile != "" {
+		modes = append(modes, "-quotes")
+	}
+	if len(flag.Args()) > 0 {
+		modes = append(modes, "file argument")
+	}
+	if len(modes) > 1 {
+		usageError("input modes cannot be combined: %s", strings.Join(modes, ", "))
+	}
+	if arcadeMode && chatsuboMode {
+		usageError("-arcade cannot be combined with -chatsubo")
+	}
+	if startParagraph >= 0 && len(flag.Args()) == 0 {
+		usageError("-start requires a file argument")
+	}
+
+	if genPrompt == "" && !chatsuboMode {
+		if set["model"] {
+			warnf("-model has no effect without -gen or -chatsubo")
+		}
+		if set["ollama"] {
+			warnf("-ollama has no effect without -gen or -chatsubo")
+		}
+	}
+	if !chatsuboMode && set["chatsubo-every"] {
+		warnf("-chatsubo-every has no effect without -chatsubo")
+	}
+	if chatsuboMode && chatsuboEvery > 0 && chatsuboEvery < 5*time.Second {
+		warnf("-chatsubo-every below 5s; using 5s")
 	}
 
 	if noTheme {
@@ -356,24 +518,34 @@ func main() {
 			os.Exit(0)
 		}
 	} else if vilSplit != "auto" || vilInfo {
-		die("-vil-split and -vil-info require -vil <file>")
+		usageError("-vil-split and -vil-info require -vil FILE")
 	}
 
-	reflow := func(s string) string {
-		sw, _ := scr.Size()
-
-		wsz := maxLineLen
-		if wsz > sw {
-			wsz = sw - 8
+	if genPrompt != "" || chatsuboMode {
+		ollamaURL = normalizeOllamaURL(ollamaURL)
+		resolved, err := resolveOllamaModel(ollamaURL, ollamaModel)
+		if err != nil {
+			die("%v", err)
 		}
-
-		s = regexp.MustCompile("\\s+").ReplaceAllString(s, " ")
-		return strings.Replace(
-			wordWrap(strings.Trim(s, " "), wsz),
-			"\n", " \n", -1)
+		ollamaModel = resolved
+		fmt.Fprintf(os.Stderr, "nm: using Ollama model %s at %s\n", ollamaModel, ollamaURL)
 	}
 
 	switch {
+	case arcadeMode:
+		// Arcade mode is started after the tcell screen is initialized.
+	case genPrompt != "":
+		fmt.Fprintln(os.Stderr, "Generating lesson with Ollama...")
+		lesson, err := requestOllamaLesson(ollamaURL, ollamaModel, genPrompt, vilKB)
+		if err != nil {
+			die("%v", err)
+		}
+		if lesson.Focus != "" {
+			fmt.Fprintf(os.Stderr, "Focus: %s\n", lesson.Focus)
+		}
+		testFn = generateLLMDrill(lesson, n, g)
+	case booksDir != "":
+		testFn = generateBookTest(booksDir)
 	case drillMode:
 		if vilKB == nil {
 			die("-drill requires -vil <file>")
@@ -424,6 +596,10 @@ func main() {
 		}
 	}()
 
+	if arcadeMode {
+		exit(runArcade(scr, timeout, oneShotMode))
+	}
+
 	var typer *typer
 	if noTheme {
 		typer = createDefaultTyper(scr)
@@ -445,6 +621,37 @@ func main() {
 	typer.BlockCursor = normalCursor
 	typer.ShowWpm = showWpm
 	typer.vil = vilKB
+	if chatsuboMode {
+		typer.chatsubo = newChatsubo(ollamaURL, ollamaModel, chatsuboEvery)
+	}
+
+	reflow := func(s string) string {
+		sw, sh := scr.Size()
+		top := sh
+		if _, kt, ok := typer.keyboardVisible(); ok {
+			top = kt
+		} else if chatsuboMode {
+			// Without a keyboard, reserve the bottom rows for the
+			// Chatsubo box instead of the keyboard's padding.
+			top -= 3
+		}
+		maxLines := top - 2
+		if maxLines < 1 {
+			maxLines = 1
+		}
+		wsz := maxLineLen
+		if sw > 8 {
+			if wsz > sw-8 {
+				wsz = sw - 8
+			}
+		} else {
+			wsz = 1
+		}
+		if wsz < 1 {
+			wsz = 1
+		}
+		return trimText(s, wsz, maxLines)
+	}
 
 	if timeout != -1 {
 		timeout *= 1e9
@@ -479,9 +686,15 @@ func main() {
 				idx--
 			}
 		case TyperComplete:
-			cpm := int(float64(ncorrect) / (float64(t) / 60e9))
+			cpm := 0
+			if t > 0 {
+				cpm = int(float64(ncorrect) / (float64(t) / 60e9))
+			}
 			wpm := cpm / 5
-			accuracy := float64(ncorrect) / float64(nerrs+ncorrect) * 100
+			accuracy := 0.0
+			if total := nerrs + ncorrect; total > 0 {
+				accuracy = float64(ncorrect) / float64(total) * 100
+			}
 
 			results = append(results, result{wpm, cpm, accuracy, time.Now().Unix(), mistakes})
 			if !noReport {

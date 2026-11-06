@@ -35,6 +35,8 @@ Best served on a terminal with truecolor and cursor shape support (e.g kitty, it
 By default 50 words from the top 1000 words in the English language are used to
 constitute the test. Custom text can be supplied by piping arbitrary text to the
 program. Each paragraph in the input is shown as a separate segment of the text.
+Practice text is wrapped to at most 60 columns and trimmed to the area above the
+keyboard, so long paragraphs cannot overlap the keyboard or Chatsubo box.
 See `man nm` or `man.md` for a complete description and a comprehensive set of
 options.
 
@@ -173,6 +175,105 @@ layer to the one required by the next character; use `F1`/`F2` to preview layers
 and `F3` to return to automatic selection. Real physical layer tracking needs raw
 HID/evdev input. Non-text actions such as arrows, mouse buttons, and macros are
 shown on the matrix but cannot be part of a text drill.
+
+## Galaxy arcade
+
+`nm -arcade` turns the trainer into a small galaxy shooter. Words arrive as
+enemy ships; each ship fires the letters of its word down at you. Type a
+falling letter to shoot it down, and shoot down every letter of a ship's word
+to blow the ship up for a bonus. If a letter reaches your ship you lose one of
+three hulls.
+
+```bash
+nm -arcade
+nm -arcade -t 180      # three-minute run
+nm -arcade -oneshot    # exit when the run ends
+```
+
+Controls and scoring:
+
+- Type letters to shoot the lowest matching projectile.
+- Consecutive hits build a combo; a miss or a hull hit clears it.
+- Waves advance as your score rises, adding ships and faster fire.
+- `R` or `Enter` restarts after game over; `Esc` quits.
+- `-t SECONDS` sets a time limit, and `-oneshot` exits at game over.
+
+The arcade uses its own galaxy palette and does not combine with `-books`,
+`-gen`, `-words`, `-quotes`, `-drill`, `-hrm`, a file argument, or
+`-chatsubo`.
+
+## Books
+
+Put `.txt`, `.md`, `.text`, or `.org` files in `./books` (the directory is
+gitignored, so copyrighted books stay local). Then practice random paragraphs:
+
+```bash
+nm -books ./books
+```
+
+Paragraphs shorter than 80 characters are skipped, which filters out chapter
+headings and page numbers. Combine books with a Vial layout to keep the layer
+guidance:
+
+```bash
+nm -vil ~/keyboards/sofle.vil \
+   -layernames base,nav,mouse,button,media,num,sym,fun \
+   -books ./books
+```
+
+## Ollama drills
+
+`-gen` asks a local Ollama model for a practice drill. When a `.vil` is
+loaded, every generated character is validated against that layout before it
+is used; without `-vil`, printable ASCII is accepted:
+
+```bash
+nm -vil ~/keyboards/sofle.vil \
+   -layernames base,nav,mouse,button,media,num,sym,fun \
+   -model qwen3:0.6b \
+   -gen "sym layer with HRM shift, avoid numbers" -t 600
+```
+
+Options:
+
+- `-ollama URL` — Ollama API URL (default `http://localhost:11434`)
+- `-model NAME` — model to use (default: auto, prefers an installed qwen model)
+- `-gen PROMPT` — generate a drill; works with the built-in Colemak-DH layout,
+  and with `-vil` for layout-aware drills
+
+The model must support Ollama's `/api/generate`. It returns JSON with either a
+character set or text. `nm` rejects unsupported characters and never lets the
+model invent keycodes.
+
+## Chatsubo
+
+Keep a local Ollama model on the wire while you type:
+
+```bash
+nm -vil ~/keyboards/sofle.vil \
+   -layernames base,nav,mouse,button,media,num,sym,fun \
+   -chatsubo -model qwen3.5:0.8b
+```
+
+Every two minutes, `nm` sends the last period's WPM, accuracy, errors, and a
+short typed excerpt to Ollama. The reply appears in a `chatsubo` box at the
+bottom of the screen in a laconic Gibson/cyberpunk style. The box reuses the
+keyboard's bottom padding, so it does not take space from the typing text.
+
+Options:
+
+- `-chatsubo` — enable the live commentary box
+- `-chatsubo-every DURATION` — time between comments (default `2m`; use `30s` for a quick test)
+- `-ollama URL` / `-model NAME` — local Ollama settings, same as `-gen`
+
+## Roadmap
+
+Ollama-assisted training ideas:
+
+- [x] Natural-language drill compiler (`-gen`)
+- [x] Live Chatsubo commentary (`-chatsubo`)
+- [ ] Adaptive drills generated from the mistake database and per-layer stats
+- [ ] Post-session coach report with likely causes and next drills
 
 ## Configuration
 

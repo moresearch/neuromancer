@@ -55,6 +55,7 @@ type typer struct {
 	vil          *vilKeyboard
 	previewLayer int
 	blinkOn      bool
+	chatsubo     *chatsubo
 }
 
 func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
@@ -171,9 +172,18 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	text := []rune(s)
 	typed := make([]rune, len(text))
 
+	if len(text) == 0 {
+		rc = TyperComplete
+		return
+	}
+
 	sw, sh := scr.Size()
 	nc, nr := calcStringDimensions(s)
 	x := (sw - nc) / 2
+
+	if t.chatsubo != nil {
+		t.chatsubo.resetSegment()
+	}
 
 	availH := sh
 	if _, top, ok := t.keyboardVisible(); ok {
@@ -272,6 +282,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			target = text[idx]
 		}
 		t.drawKeyboard(target)
+		t.drawChatsubo()
 
 		if timeLimit != -1 && !startTime.IsZero() {
 			remaining := timeLimit - time.Now().Sub(startTime)
@@ -461,6 +472,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 				return
 			}
 
+			t.maybeChatsubo(text, typed, idx)
 			t.blinkOn = !t.blinkOn
 			redraw()
 		}

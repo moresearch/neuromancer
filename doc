@@ -15,6 +15,16 @@ Modes
     -vil-split MODE     Split the Vial matrix into halves: auto, rows, cols
                         or none (default: auto).
     -vil-info           Print the parsed Vial matrix and layers, then exit.
+    -arcade             Galaxy arcade: word-ships fire letters at you. Type
+                        the falling letters to shoot them down.
+    -books DIR          Practice random paragraphs from text files in DIR.
+    -gen PROMPT         Ask a local Ollama model for a drill (works with the
+                        built-in layout; add -vil for layout-aware drills).
+    -ollama URL         Ollama API URL (default: http://localhost:11434).
+    -model NAME         Ollama model (default: auto, prefers qwen).
+    -chatsubo           Live Chatsubo commentary from Ollama.
+    -chatsubo-every DURATION
+                        Time between comments (default: 2m; e.g. 30s).
 
 Word Mode
     -n GROUPSZ          Sets the number of words which constitute a group.
@@ -30,8 +40,8 @@ File Mode
 Aesthetics
     -showwpm            Display WPM whilst typing.
     -theme THEMEFILE    The theme to use. 
-    -w                  The maximum line length in characters. This option is 
-                        ignored if -raw is present.
+    -w N                The maximum line length in characters (default: 60).
+                        This option is ignored if -raw is present.
 
     The Colemak-DH (matrix) layout is shown at the bottom of the screen. The
     key producing the next character is highlighted in green, and the most

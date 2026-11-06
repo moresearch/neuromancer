@@ -55,6 +55,34 @@ usage: nm \[OPTION\]... \[FILE\]
 
 : Print the parsed matrix and every Vial layer, then exit.
 
+-arcade
+
+: Galaxy arcade mode. Words arrive as enemy ships and fire their letters at you. Type a falling letter to shoot it down; clear every letter of a ship's word to destroy it for a bonus. `R`/`Enter` restarts after game over and `Esc` quits.
+
+-books *DIR*
+
+: Draw random paragraphs from `.txt`, `.md`, `.text`, or `.org` files in DIR. Paragraphs shorter than 80 characters are skipped.
+
+-gen *PROMPT*
+
+: Ask a local Ollama model for a practice drill. Works with the built-in Colemak-DH layout; with **-vil**, generated characters are validated against the loaded layout.
+
+-ollama *URL*
+
+: Ollama API URL (default `http://localhost:11434`).
+
+-model *NAME*
+
+: Ollama model to use (default: auto, prefers an installed qwen model).
+
+-chatsubo
+
+: Show live Chatsubo commentary from Ollama in a box at the bottom of the screen. Uses **-ollama** and **-model**.
+
+-chatsubo-every *DURATION*
+
+: Time between Chatsubo comments (default `2m`; for example `30s`).
+
 ## Word Mode
 
 -n *GROUPSZ*
@@ -94,7 +122,7 @@ usage: nm \[OPTION\]... \[FILE\]
 
 -w 
 
-: The maximum line length in characters. This option is ignored if -raw is present.
+: The maximum line length in characters (default: 60). This option is ignored if -raw is present.
 
 ## Test Parameters
 
@@ -222,6 +250,55 @@ are determined exclusively by the input.
   ```
   nm -vil ~/sofle.vil lesson.txt
   ```
+
+## ARCADE
+
+  **-arcade** is a self-contained galaxy shooter. Word-ships drift across the
+  top of the screen and fire the letters of their word downward. Type the
+  letters to shoot them down; let a letter reach your ship and you lose one of
+  three hulls. Destroy every letter of a ship's word to blow the ship up. Waves add
+  ships and speed as your score rises.
+
+  ```
+  nm -arcade
+  nm -arcade -t 180
+  ```
+
+  **-t SECONDS** sets a time limit and **-oneshot** exits when the run ends.
+  Arcade mode cannot be combined with the other input modes or **-chatsubo**.
+
+## BOOKS
+
+  Files ending in `.txt`, `.md`, `.text`, or `.org` under the given directory are
+  loaded as practice sources:
+
+  ```
+  nm -books ./books
+  ```
+
+  Paragraphs shorter than 80 characters are skipped. Books can be combined with
+  **-vil** so layer and HRM guidance stays active.
+
+## OLLAMA
+
+  **-gen** asks a local Ollama model for a drill and validates every character
+  against the loaded `.vil`:
+
+  ```
+  nm -vil ~/sofle.vil -layernames base,nav,media,num,sym,fun \
+     -model qwen3:0.6b -gen "sym layer with HRM shift" -t 600
+  ```
+
+  The model must support Ollama's `/api/generate` endpoint. If it returns an
+  unsupported character, nm refuses the drill instead of showing an impossible
+  target.
+
+  With **-chatsubo**, nm sends the last interval's WPM, accuracy, errors and a
+  short typed excerpt to Ollama and shows a laconic Gibson/cyberpunk comment in
+  a box at the bottom of the screen. The box reuses the keyboard's bottom
+  padding, so it does not take space from the typing text.
+  **-chatsubo-every** controls the period (default `2m`; use `30s` for a quick
+  test).
 
   The terminal only receives the text produced by the operating system, not the
   physical key or layer. nm can verify the resulting text and teach which layer
