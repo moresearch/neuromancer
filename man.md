@@ -225,11 +225,14 @@ are determined exclusively by the input.
   of the key to press blinks green/white; the resting keys stay static with a dim
   green label and the same border as the other keys. The thumb home is the space thumb if the
   layer has one, otherwise the innermost thumb key. A layer or shift key on the opposite half stays highlighted in cyan,
-  since Miryoku-style layers often use the opposite thumb. The status line under
-  the matrix spells out the sequence, for example:
+  since Miryoku-style layers often use the opposite thumb. Shift guidance uses
+  the opposite half from the key being pressed: if `p` is on the left half, the
+  right half's shift is recommended. The status line under the matrix spells
+  out the sequence, for example:
 
   ```
   hold LT2 (sym) + press !
+  hold o (shift) + press p
   ```
 
   The matrix geometry and layer contents come from the `.vil` file, so Sofle,

@@ -8,6 +8,8 @@
    commentary.
  - Gave Chatsubo a fixed 72x4 size and clip both body lines (guidance and LLM
    reply) to the box capacity so text cannot overflow.
+ - Shift guidance now recommends a shift key on the opposite split half from
+   the key being pressed, preferring the other hand's HRM shift.
  - Book mode now shows the source filename below the paragraph.
  - Fixed long unbroken tokens overflowing the configured practice width.
  - Fixed `-gen` leaving thinking enabled on reasoning models.

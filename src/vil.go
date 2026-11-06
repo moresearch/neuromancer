@@ -1281,29 +1281,47 @@ func (kb *vilKeyboard) findLayerActivator(target int) *vilActivator {
 	return best
 }
 
-func (kb *vilKeyboard) findShiftKey(layer, excludeRow, excludeCol int) (row, col int, ok bool) {
-	// Prefer a home-row-mod shift key over a dedicated shift key.
+func (kb *vilKeyboard) findShiftOnSide(layer, excludeRow, excludeCol, side int, hrmOnly bool) (row, col int, ok bool) {
 	for r := range kb.layers[layer].matrix {
 		for c := range kb.layers[layer].matrix[r] {
 			if r == excludeRow && c == excludeCol {
 				continue
 			}
-			if a := kb.actionAt(layer, r, c); a.mods == "Shift" {
-				return r, c, true
-			}
-		}
-	}
-	for r := range kb.layers[layer].matrix {
-		for c := range kb.layers[layer].matrix[r] {
-			if r == excludeRow && c == excludeCol {
+			if side != 0 && kb.sideFor(r, c) != side {
 				continue
 			}
-			if a := kb.actionAt(layer, r, c); a.isShift {
+			a := kb.actionAt(layer, r, c)
+			if hrmOnly {
+				if a.mods == "Shift" {
+					return r, c, true
+				}
+			} else if a.isShift {
 				return r, c, true
 			}
 		}
 	}
 	return -1, -1, false
+}
+
+func (kb *vilKeyboard) findShiftKey(layer, excludeRow, excludeCol int) (row, col int, ok bool) {
+	// Use the opposite half from the target key, so shifted characters are
+	// typed with the other hand. Prefer an HRM shift, then a dedicated shift.
+	otherSide := 0
+	if side := kb.sideFor(excludeRow, excludeCol); side != 0 {
+		otherSide = -side
+	}
+	if otherSide != 0 {
+		if r, c, ok := kb.findShiftOnSide(layer, excludeRow, excludeCol, otherSide, true); ok {
+			return r, c, true
+		}
+		if r, c, ok := kb.findShiftOnSide(layer, excludeRow, excludeCol, otherSide, false); ok {
+			return r, c, true
+		}
+	}
+	if r, c, ok := kb.findShiftOnSide(layer, excludeRow, excludeCol, 0, true); ok {
+		return r, c, true
+	}
+	return kb.findShiftOnSide(layer, excludeRow, excludeCol, 0, false)
 }
 
 func (kb *vilKeyboard) findRune(target rune) (vilHint, bool) {
