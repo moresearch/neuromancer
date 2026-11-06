@@ -297,9 +297,11 @@ are determined exclusively by the input.
   With **-chatsubo**, nm sends the last interval's WPM, accuracy, errors and a
   short typed excerpt to Ollama and shows a laconic Gibson/cyberpunk comment in
   a box between the practice text and the keyboard. Text is wrapped to leave
-  room for the box, so the two do not overlap. The box shows the current
+  room for the box, so the two do not overlap. The box has a fixed four-row,
+  72-column size (shrinking only on narrower terminals). It shows the current
   layer/shift guidance line first (for example `hold t (shift) + press p`),
-  followed by the model's commentary.
+  followed by the model's commentary. Both lines are clipped to the box body
+  capacity, so guidance and LLM output cannot spill outside the box.
   **-chatsubo-every** controls the period (default `2m`; use `30s` for a quick
   test).
 

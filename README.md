@@ -261,8 +261,11 @@ the practice text and the keyboard in a laconic Gibson/cyberpunk style. Text is
 wrapped to leave room for the box, so the two do not overlap. On very short
 terminals the box falls back to the keyboard's bottom padding to stay visible.
 
-The box shows the current key guidance first, for example
-`hold t (shift) + press p`, followed by the model's commentary.
+The box has a fixed four-row, 72-column size (shrinking only when the terminal
+is narrower). It shows the current key guidance first, for example
+`hold t (shift) + press p`, followed by the model's commentary. Both lines are
+clipped to the box body capacity, so neither the guidance nor the LLM reply can
+grow or spill outside it.
 
 Options:
 

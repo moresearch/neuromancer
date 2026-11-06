@@ -6,6 +6,8 @@
    reserve enough rows that text, attribution, and timers do not overlap it.
    The box now shows the layer/shift guidance line first, then the model
    commentary.
+ - Gave Chatsubo a fixed 72x4 size and clip both body lines (guidance and LLM
+   reply) to the box capacity so text cannot overflow.
  - Book mode now shows the source filename below the paragraph.
  - Fixed long unbroken tokens overflowing the configured practice width.
  - Fixed `-gen` leaving thinking enabled on reasoning models.

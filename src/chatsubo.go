@@ -13,9 +13,14 @@ import (
 // plus attribution/timer can fit between the text and the keyboard.
 const chatsuboMinAbove = 8
 
-// chatsuboBoxHeight includes the border, guidance line, commentary line, and
-// bottom border.
-const chatsuboBoxHeight = 4
+// The box has a fixed size. Its body holds exactly two text lines: the key
+// guidance line and the model commentary line. Each line has
+// chatsuboBoxWidth-4 usable runes; every string is clipped to that capacity.
+const (
+	chatsuboBoxWidth   = 72
+	chatsuboBoxHeight  = 4
+	chatsuboReplyRunes = chatsuboBoxWidth - 4
+)
 
 type chatsuboSnapshot struct {
 	Seconds  int
@@ -64,11 +69,27 @@ func (c *chatsubo) resetSegment() {
 	c.mu.Unlock()
 }
 
+// chatsuboClipRunes trims s to at most max runes. When it truncates, the
+// ellipsis is included in max so the result never exceeds the box capacity.
+func chatsuboClipRunes(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	if max == 1 {
+		return string(r[:1])
+	}
+	return string(r[:max-1]) + "…"
+}
+
 func (c *chatsubo) ask(snap chatsuboSnapshot) (string, error) {
-	system := `You are Chatsubo, a laconic Gibson-style AI typing coach.
-Comment on the typist's last interval in 1-2 short sentences, max 200 characters.
+	system := fmt.Sprintf(`You are Chatsubo, a laconic Gibson-style AI typing coach.
+Comment on the typist's last interval in one short sentence, max %d characters.
 Be noir/cyberpunk, specific, and not cruel.
-No markdown, no emoji, no quotation marks.`
+No markdown, no emoji, no quotation marks.`, chatsuboReplyRunes)
 
 	user := fmt.Sprintf(
 		"interval_seconds=%d\nwpm=%d\naccuracy=%.1f\nerrors=%d\nchars=%d\nrecent_typed=%q",
@@ -82,13 +103,9 @@ No markdown, no emoji, no quotation marks.`
 
 	text = strings.Join(strings.Fields(text), " ")
 	if text == "" {
-		return "silence on the wire. keep typing.", nil
+		text = "silence on the wire. keep typing."
 	}
-	r := []rune(text)
-	if len(r) > 200 {
-		text = string(r[:199]) + "…"
-	}
-	return text, nil
+	return chatsuboClipRunes(text, chatsuboReplyRunes), nil
 }
 
 func (c *chatsubo) request(snap chatsuboSnapshot, scr tcell.Screen) {
@@ -96,13 +113,9 @@ func (c *chatsubo) request(snap chatsuboSnapshot, scr tcell.Screen) {
 
 	c.mu.Lock()
 	if err != nil {
-		msg := err.Error()
-		if r := []rune(msg); len(r) > 70 {
-			msg = string(r[:70]) + "…"
-		}
-		c.comment = "link lost: " + msg
+		c.comment = chatsuboClipRunes("link lost: "+err.Error(), chatsuboReplyRunes)
 	} else {
-		c.comment = comment
+		c.comment = chatsuboClipRunes(comment, chatsuboReplyRunes)
 	}
 	c.busy = false
 	c.mu.Unlock()
@@ -238,9 +251,9 @@ func (t *typer) drawChatsubo() {
 	}
 
 	sw, sh := t.Scr.Size()
-	width := sw - 8
-	if width > 72 {
-		width = 72
+	width := chatsuboBoxWidth
+	if width > sw-8 {
+		width = sw - 8
 	}
 	if width < 30 || sh < chatsuboBoxHeight+1 {
 		return
@@ -281,12 +294,13 @@ func (t *typer) drawChatsubo() {
 	drawString(t.Scr, x, y, top, -1, border)
 
 	inner := width - 2
+	bodyCols := inner - 2
 	drawBoxLine := func(row int, text string, style tcell.Style) {
 		r := []rune(strings.Join(strings.Fields(text), " "))
-		if len(r) > inner-2 {
-			r = r[:inner-2]
+		if len(r) > bodyCols {
+			r = r[:bodyCols]
 		}
-		line := "│ " + string(r) + strings.Repeat(" ", inner-2-len(r)) + " │"
+		line := "│ " + string(r) + strings.Repeat(" ", bodyCols-len(r)) + " │"
 		drawString(t.Scr, x, row, line, -1, style)
 	}
 
