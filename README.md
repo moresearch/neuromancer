@@ -179,8 +179,8 @@ default (`-layer-track`, enabled unless disabled) and switches the displayed
 layout to the layer whose thumb key you are holding. It needs read/write access
 to the Vial `/dev/hidraw*` interface (set `NM_HIDRAW=/dev/hidrawN` to override
 the auto-detected device) and an unlocked Vial keyboard. When a layer key is
-held, the matrix shows that layer’s keys and the hint line says `held: …`. Use
-`-layer-track=false` to disable it.
+held, the matrix shows only that layer’s own mappings (transparent keys show
+`▽`) and the hint line says `held: …`. Use `-layer-track=false` to disable it.
 
 Without raw HID tracking (non-Linux, locked Vial, or no permission), the
 terminal only receives the text your OS produces, so `nm` cannot see a physical

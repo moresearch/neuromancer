@@ -1687,25 +1687,26 @@ func (t *typer) drawVilKeyboard(target rune) {
 		}
 	}
 
+	rawLayer := physical || preview
 	for r := 0; r < rows; r++ {
 		y := m.top + r*(m.keyH+m.rowGap)
 
 		switch {
 		case kb.splitCols:
 			leftWidth := kb.halfCols*m.keyWidth + (kb.halfCols-1)*m.keyGap
-			kb.drawCols(t.Scr, layer, r, 0, kb.halfCols, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, t.blinkOn, t.defaultStyle)
+			kb.drawCols(t.Scr, layer, r, 0, kb.halfCols, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, t.blinkOn, rawLayer, t.defaultStyle)
 			kb.drawCols(t.Scr, layer, r, kb.halfCols, kb.maxCols,
-				x0+leftWidth+vilSplitGap, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, t.blinkOn, t.defaultStyle)
+				x0+leftWidth+vilSplitGap, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, t.blinkOn, rawLayer, t.defaultStyle)
 		case kb.halfRows > 0:
 			leftWidth := kb.halfWidth(m.keyWidth, m.keyGap)
-			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, t.blinkOn, t.defaultStyle)
+			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, t.blinkOn, rawLayer, t.defaultStyle)
 			if r+kb.halfRows < len(kb.layers[0].matrix) {
 				kb.drawHalf(t.Scr, layer, r+kb.halfRows,
 					x0+leftWidth+vilSplitGap,
-					y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, t.blinkOn, t.defaultStyle)
+					y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, t.blinkOn, rawLayer, t.defaultStyle)
 			}
 		default:
-			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, true, t.blinkOn, t.defaultStyle)
+			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, true, t.blinkOn, rawLayer, t.defaultStyle)
 		}
 	}
 
@@ -1723,7 +1724,7 @@ func (t *typer) drawVilKeyboard(target rune) {
 	}
 }
 
-func (kb *vilKeyboard) drawHalf(scr tcell.Screen, layer, matrixRow, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused, blink bool, def tcell.Style) {
+func (kb *vilKeyboard) drawHalf(scr tcell.Screen, layer, matrixRow, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused, blink bool, raw bool, def tcell.Style) {
 	if layer < 0 || layer >= len(kb.layers) {
 		return
 	}
@@ -1732,10 +1733,10 @@ func (kb *vilKeyboard) drawHalf(scr tcell.Screen, layer, matrixRow, x, y, keyWid
 	}
 
 	kb.drawCols(scr, layer, matrixRow, 0, len(kb.layers[layer].matrix[matrixRow]),
-		x, y, keyWidth, keyGap, keyH, hint, found, wrongRow, wrongCol, focused, blink, def)
+		x, y, keyWidth, keyGap, keyH, hint, found, wrongRow, wrongCol, focused, blink, raw, def)
 }
 
-func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, endCol, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused, blink bool, def tcell.Style) {
+func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, endCol, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused, blink bool, raw bool, def tcell.Style) {
 	if layer < 0 || layer >= len(kb.layers) {
 		return
 	}
@@ -1756,7 +1757,12 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 			continue
 		}
 
-		a := kb.actionAt(layer, matrixRow, col)
+		var a vilAction
+		if raw {
+			a = kb.layers[layer].actions[matrixRow][col]
+		} else {
+			a = kb.actionAt(layer, matrixRow, col)
+		}
 		label := a.label
 		top := ""
 		if a.mods != "" {
@@ -1767,6 +1773,8 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 		}
 		if a.transparent && label == "" {
 			label = "▽"
+		} else if a.none && label == "" {
+			label = "."
 		}
 
 		style := def
