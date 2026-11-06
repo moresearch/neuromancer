@@ -1631,16 +1631,27 @@ func (t *typer) drawVilKeyboard(target rune) {
 	}
 
 	hint, found := kb.findRune(target)
-	preview := t.previewLayer >= 0 && t.previewLayer < len(kb.layers)
+
+	physicalLayer := -1
+	if t.layerTracker != nil {
+		if l := t.layerTracker.Layer(); l >= 0 && l < len(kb.layers) {
+			physicalLayer = l
+		}
+	}
+	physical := physicalLayer >= 0
+	preview := !physical && t.previewLayer >= 0 && t.previewLayer < len(kb.layers)
 	layer := 0
-	if preview {
+	switch {
+	case physical:
+		layer = physicalLayer
+	case preview:
 		layer = t.previewLayer
-	} else if found {
+	case found:
 		layer = hint.layer
 	}
 
 	focusLeft, focusRight := true, true
-	if found && !preview {
+	if found && !preview && !physical {
 		switch {
 		case kb.splitCols:
 			focusLeft = hint.col < kb.halfCols
@@ -1652,6 +1663,9 @@ func (t *typer) drawVilKeyboard(target rune) {
 	}
 
 	showTarget := found && (!preview || hint.layer == layer)
+	if physical {
+		showTarget = found && hint.layer == layer
+	}
 
 	width := kb.width(m.keyWidth, m.keyGap)
 	x0 := (sw - width) / 2
@@ -1697,7 +1711,10 @@ func (t *typer) drawVilKeyboard(target rune) {
 
 	hintY := m.top + rows*m.keyH + (rows-1)*m.rowGap
 	hintText := kb.hintText(hint, found)
-	if preview {
+	switch {
+	case physical:
+		hintText = "held: " + kb.hintLayerName(layer)
+	case preview:
 		hintText = "preview: " + kb.hintLayerName(layer)
 	}
 	t.hintText = hintText

@@ -174,15 +174,20 @@ nm -vil ~/sofle.vil -layernames base,nav,mouse,button,media,num,sym,fun -drill
 Any text file also works as a lesson, so `nm -vil ~/sofle.vil lesson.txt` walks
 through the exact layer sequence for every character in that file.
 
-Limitations: the terminal only receives the text your OS produces, not the
-physical key or layer. `nm` can verify the resulting text and teach which layer
-and key produce each character, but it cannot prove that you actually held the
-layer key. Pure layer keys such as `MO(...)`/`TG(...)` produce no terminal event,
-so `nm` cannot switch on a physical layer key press. It switches the displayed
-layer to the one required by the next character; use `F1`/`F2` to preview layers
-and `F3` to return to automatic selection. Real physical layer tracking needs raw
-HID/evdev input. Non-text actions such as arrows, mouse buttons, and macros are
-shown on the matrix but cannot be part of a text drill.
+Physical layer tracking: on Linux, `nm` reads the Vial raw HID switch matrix by
+default (`-layer-track`, enabled unless disabled) and switches the displayed
+layout to the layer whose thumb key you are holding. It needs read/write access
+to the Vial `/dev/hidraw*` interface (set `NM_HIDRAW=/dev/hidrawN` to override
+the auto-detected device) and an unlocked Vial keyboard. When a layer key is
+held, the matrix shows that layer’s keys and the hint line says `held: …`. Use
+`-layer-track=false` to disable it.
+
+Without raw HID tracking (non-Linux, locked Vial, or no permission), the
+terminal only receives the text your OS produces, so `nm` cannot see a physical
+layer key press. In that fallback it displays the layer required by the next
+character; use `F1`/`F2` to preview layers and `F3` to return to automatic
+selection. Non-text actions such as arrows, mouse buttons, and macros are shown
+on the matrix but cannot be part of a text drill.
 
 ## Galaxy arcade
 

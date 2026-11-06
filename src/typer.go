@@ -59,6 +59,7 @@ type typer struct {
 	chatTop      int
 	chatPlaced   bool
 	hintText     string
+	layerTracker *layerTracker
 }
 
 func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
@@ -383,6 +384,8 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 		case *tcell.EventResize:
 			rc = TyperResize
 			return
+		case *tcell.EventInterrupt:
+			// Physical layer changed; the next loop redraws the matrix.
 		case *tcell.EventKey:
 			if runtime.GOOS != "windows" && ev.Key() == tcell.KeyBackspace { //Control+backspace on unix terms
 				if !t.DisableBackspace {

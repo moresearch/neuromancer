@@ -19,6 +19,14 @@ import (
 var scr tcell.Screen
 var csvMode bool
 var jsonMode bool
+var activeLayerTracker *layerTracker
+
+func stopLayerTracker() {
+	if activeLayerTracker != nil {
+		activeLayerTracker.Close()
+		activeLayerTracker = nil
+	}
+}
 
 type result struct {
 	Wpm       int       `json:"wpm"`
@@ -29,6 +37,7 @@ type result struct {
 }
 
 func die(format string, args ...interface{}) {
+	stopLayerTracker()
 	if scr != nil {
 		scr.Fini()
 	}
@@ -74,6 +83,7 @@ func parseConfig(b []byte) map[string]string {
 }
 
 func exit(rc int) {
+	stopLayerTracker()
 	scr.Fini()
 
 	if jsonMode {
@@ -195,6 +205,9 @@ Modes
     -vil-split MODE     Split the Vial matrix into halves: auto, rows, cols
                         or none (default: auto).
     -vil-info           Print the parsed Vial layers and exit.
+    -layer-track        Follow physical layer keys through the Vial raw HID
+                        interface on Linux (default: on). Use
+                        -layer-track=false to disable.
     -arcade             Galaxy arcade: word-ships fire letters at you. Type
                         the falling letters to shoot them down.
     -books DIR          Practice random paragraphs from .txt/.md/.text/.org
@@ -323,6 +336,7 @@ func main() {
 	var drillMode bool
 	var hrmMode bool
 	var arcadeMode bool
+	var layerTrackEnabled bool
 	var chatsuboMode bool
 	var chatsuboEvery time.Duration
 	var multiMode bool
@@ -353,6 +367,7 @@ func main() {
 	flag.StringVar(&ollamaModel, "model", envOr("OLLAMA_MODEL", ""), "")
 
 	flag.BoolVar(&showWpm, "showwpm", false, "")
+	flag.BoolVar(&layerTrackEnabled, "layer-track", true, "")
 	flag.BoolVar(&arcadeMode, "arcade", false, "")
 	flag.BoolVar(&drillMode, "drill", false, "")
 	flag.BoolVar(&hrmMode, "hrm", false, "")
@@ -621,6 +636,14 @@ func main() {
 	typer.BlockCursor = normalCursor
 	typer.ShowWpm = showWpm
 	typer.vil = vilKB
+	if vilKB != nil && layerTrackEnabled && layerTrackingSupported() {
+		if tracker, err := startLayerTracker(scr, vilKB); err != nil {
+			warnf("physical layer tracking unavailable: %v", err)
+		} else {
+			activeLayerTracker = tracker
+			typer.layerTracker = tracker
+		}
+	}
 	if chatsuboMode {
 		typer.chatsubo = newChatsubo(ollamaURL, ollamaModel, chatsuboEvery, chatsuboLayoutSummary(vilKB))
 	}

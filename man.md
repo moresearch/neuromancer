@@ -55,6 +55,10 @@ usage: nm \[OPTION\]... \[FILE\]
 
 : Print the parsed matrix and every Vial layer, then exit.
 
+-layer-track
+
+: Follow physical layer keys by polling the Vial raw HID switch matrix on Linux. Enabled by default; use **-layer-track=false** to disable. Set `NM_HIDRAW=/dev/hidrawN` to choose the device, which must be readable/writable by your user and unlocked in Vial.
+
 -arcade
 
 : Galaxy arcade mode. Words arrive as enemy ships and fire their letters at you. Type a falling letter to shoot it down; clear every letter of a ship's word to destroy it for a bonus. `R`/`Enter` restarts after game over and `Esc` quits.
@@ -319,15 +323,19 @@ are determined exclusively by the input.
   **-chatsubo-every** controls the period (default `2m`; use `30s` for a quick
   test).
 
-  The terminal only receives the text produced by the operating system, not the
-  physical key or layer. nm can verify the resulting text and teach which layer
-  and key produce each character, but it cannot prove that the layer key was
-  actually held. Pure layer keys such as `MO(...)`/`TG(...)` produce no terminal
-  event, so nm cannot switch on a physical layer key press. It switches the
-  displayed layer to the one required by the next character; use `F1`/`F2` to
-  preview layers and `F3` to return to automatic selection. Real physical layer
-  tracking needs raw HID/evdev input. Non-text actions such as arrows, mouse
-  buttons, and macros are shown on the matrix but cannot be part of a text drill.
+  On Linux, nm reads the Vial raw HID switch matrix by default
+  (**-layer-track**) and switches the displayed layout to the layer whose thumb
+  key is held. This needs read/write access to the Vial `/dev/hidraw*` interface
+  (set `NM_HIDRAW=/dev/hidrawN` to override auto-detection) and an unlocked Vial
+  keyboard. While a layer key is held the matrix shows that layer and the hint
+  says `held: …`. Use **-layer-track=false** to disable it.
+
+  Without raw HID tracking (non-Linux, locked Vial, or no permission), the
+  terminal only receives the text produced by the operating system, not the
+  physical key or layer. In that fallback nm displays the layer required by the
+  next character; use **F1**/**F2** to preview layers and **F3** to return to
+  automatic selection. Non-text actions such as arrows, mouse buttons, and
+  macros are shown on the matrix but cannot be part of a text drill.
 
 # EXAMPLES
 

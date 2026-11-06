@@ -3,7 +3,7 @@ PREFIX := /usr/local
 
 .PHONY: all
 all:
-	go build -o bin/nm src/*.go
+	go build -o bin/nm ./src
 
 .PHONY: test
 test:
@@ -29,8 +29,8 @@ assets:
 
 .PHONY: rel
 rel:
-	GOOS=darwin GOARCH=amd64 go build -o bin/nm-osx src/*.go
-	GOOS=windows GOARCH=amd64 go build -o bin/nm.exe src/*.go
-	GOOS=linux GOARCH=amd64 go build -o bin/nm-linux src/*.go
-	GOOS=linux GOARCH=arm go build -o bin/nm-linux_arm src/*.go
-	GOOS=linux GOARCH=arm64 go build -o bin/nm-linux_arm64 src/*.go
+	GOOS=darwin GOARCH=amd64 go build -o bin/nm-osx ./src
+	GOOS=windows GOARCH=amd64 go build -o bin/nm.exe ./src
+	GOOS=linux GOARCH=amd64 go build -o bin/nm-linux ./src
+	GOOS=linux GOARCH=arm go build -o bin/nm-linux_arm ./src
+	GOOS=linux GOARCH=arm64 go build -o bin/nm-linux_arm64 ./src

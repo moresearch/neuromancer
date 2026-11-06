@@ -14,6 +14,10 @@
    out the highlighted hold/layer/shift sequence before the target key.
  - Fixed stale key labels and old hint text when the displayed layer changes;
    the matrix area and hint line are cleared before each redraw.
+ - Added Linux raw HID layer tracking (`-layer-track`). nm polls the Vial switch
+   matrix, follows held thumb layer keys in real time, and shows that layer’s
+   keys while held. Requires access to `/dev/hidraw*` and an unlocked Vial
+   keyboard; `NM_HIDRAW` selects the device.
  - Enlarged Chatsubo to a fixed 96x8 box with padded text and up to three
    wrapped commentary lines; a compact four-row version is used on short
    terminals. Guidance and model text are clipped to the body capacity.

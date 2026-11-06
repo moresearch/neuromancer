@@ -262,6 +262,12 @@ func (t *typer) maybeChatsubo(text, typed []rune, idx int) {
 	if target != 0 {
 		targetText = string(target)
 	}
+	hint := t.hintFor(target)
+	if t.layerTracker != nil && t.vil != nil {
+		if layer := t.layerTracker.Layer(); layer >= 0 && layer < len(t.vil.layers) {
+			hint = "held: " + t.vil.hintLayerName(layer)
+		}
+	}
 	snap := chatsuboSnapshot{
 		Seconds:  int(elapsed.Seconds()),
 		WPM:      wpm,
@@ -269,7 +275,7 @@ func (t *typer) maybeChatsubo(text, typed []rune, idx int) {
 		Errors:   dErrors,
 		Chars:    chars,
 		Recent:   recentTyped(typed[:idx], 32),
-		Hint:     t.hintFor(target),
+		Hint:     hint,
 		Target:   targetText,
 	}
 
