@@ -86,9 +86,9 @@ func chatsuboLayoutSummary(kb *vilKeyboard) string {
 	for i := 1; i < len(kb.layers); i++ {
 		if a := kb.findLayerActivator(i); a != nil {
 			fmt.Fprintf(&b, "- %s (layer %d): hold or tap %s (row %d, col %d)\n",
-				kb.layerName(i), i, a.action.label, a.row, a.col)
+				kb.hintLayerName(i), i, a.action.label, a.row, a.col)
 		} else {
-			fmt.Fprintf(&b, "- %s (layer %d): no activator key found\n", kb.layerName(i), i)
+			fmt.Fprintf(&b, "- %s (layer %d): no activator key found\n", kb.hintLayerName(i), i)
 		}
 	}
 	b.WriteString("labels: C/A/G/S prefixes are Ctrl/Alt/Gui/Shift home-row mods; " +

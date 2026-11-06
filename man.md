@@ -217,8 +217,14 @@ are determined exclusively by the input.
   dedicated chord drill mode.
 
   For every character nm finds the cheapest key which produces it in the loaded
-  keymap and displays that layer. The border of the key to press blinks green and
-  white; the key keeps its normal background. The inactive half is dimmed. Only the ten resting keys — four finger home keys per hand
+  keymap and displays that layer. If no **-layernames** are supplied, layers are
+  classified from their contents (`num/sym`, `mouse`, `fn/media`, `fn/shift`,
+  `fn/ctrl`, `nav`, `shift`, `ctrl`), and those names are used in guidance and
+  Chatsubo tips. The sequence is highlighted on the matrix: the layer activator
+  and shift key are cyan, the target key is green, and the hint text spells out
+  the order, for example `hold LT2 (num/sym) + press 5`. The border of the key to
+  press blinks green and white; the key keeps its normal background. The inactive
+  half is dimmed. Only the ten resting keys — four finger home keys per hand
   plus one thumb key per hand — are tinted dim green. The eight finger homes are
   located by the base-layer `a r s t` and `n e i o` keys, so they stay correct
   even when the `.vil` matrix has an extra inner or outer column. Only the border

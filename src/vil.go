@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/gdamore/tcell"
 )
@@ -257,9 +258,14 @@ func (kb *vilKeyboard) info() string {
 	if kb.thumbRightOK {
 		fmt.Fprintf(&b, "thumb right: row %d col %d\n", kb.thumbRightRow, kb.thumbRightCol)
 	}
+	b.WriteString("purposes:")
+	for i := range kb.layers {
+		fmt.Fprintf(&b, " %d=%s", i, kb.hintLayerName(i))
+	}
+	b.WriteString("\n")
 
 	for li, lay := range kb.layers {
-		fmt.Fprintf(&b, "\nlayer %d (%s):\n", li, kb.layerName(li))
+		fmt.Fprintf(&b, "\nlayer %d (%s):\n", li, kb.hintLayerName(li))
 		for _, row := range lay.actions {
 			for _, a := range row {
 				label := a.label
@@ -1179,6 +1185,142 @@ func (kb *vilKeyboard) layerName(layer int) string {
 	return fmt.Sprintf("layer %d", layer)
 }
 
+func isFnLayerLabel(label string) bool {
+	if len(label) > 1 && label[0] == 'F' {
+		if n, err := strconv.Atoi(label[1:]); err == nil && n >= 1 && n <= 24 {
+			return true
+		}
+	}
+	switch label {
+	case "RGB", "MUT", "V+", "V-", "PLY", "NXT", "PRV", "STP", "BOO", "RST":
+		return true
+	}
+	return false
+}
+
+func rawHasFnKey(raw string) bool {
+	for {
+		i := strings.Index(raw, "KC_F")
+		if i < 0 {
+			return false
+		}
+		rest := raw[i+4:]
+		j := 0
+		for j < len(rest) && rest[j] >= '0' && rest[j] <= '9' {
+			j++
+		}
+		if j > 0 {
+			if n, err := strconv.Atoi(rest[:j]); err == nil && n >= 1 && n <= 24 {
+				return true
+			}
+		}
+		raw = rest
+	}
+}
+
+func isMouseLayerLabel(label string) bool {
+	if strings.HasPrefix(label, "BT") || strings.HasPrefix(label, "MS") {
+		return true
+	}
+	switch label {
+	case "M←", "M→", "M↑", "M↓", "W←", "W→", "W↑", "W↓":
+		return true
+	}
+	return false
+}
+
+func isNavLayerLabel(label string) bool {
+	switch label {
+	case "←", "→", "↑", "↓", "HOM", "END", "PGU", "PGD", "INS", "DEL":
+		return true
+	}
+	return false
+}
+
+// inferLayerName guesses what a layer is for from the actions it defines. It
+// lets guidance and Chatsubo talk about "num/sym" or "mouse" even when the
+// .vil has no -layernames.
+func (kb *vilKeyboard) inferLayerName(layer int) string {
+	if layer < 0 || layer >= len(kb.layers) {
+		return ""
+	}
+	if layer == 0 {
+		return "base"
+	}
+
+	var digits, symbols, fn, mouse, nav, shift, ctrl, layerKeys int
+	for r := range kb.layers[layer].actions {
+		for c := range kb.layers[layer].actions[r] {
+			a := kb.layers[layer].actions[r][c]
+			if a.transparent || a.none {
+				continue
+			}
+			if a.mods == "Shift" || a.isShift ||
+				strings.HasPrefix(a.raw, "LSFT(") || strings.HasPrefix(a.raw, "RSFT(") {
+				shift++
+			}
+			if a.mods == "Ctrl" || a.label == "CTL" ||
+				strings.HasPrefix(a.raw, "LCTL(") || strings.HasPrefix(a.raw, "RCTL(") {
+				ctrl++
+			}
+			if a.layerMode != "" {
+				layerKeys++
+			}
+			switch {
+			case a.output >= '0' && a.output <= '9':
+				digits++
+			case a.output != 0 && a.output != ' ' && unicode.IsPrint(a.output) && !unicode.IsLetter(a.output):
+				symbols++
+			}
+			label := a.label
+			switch {
+			case isFnLayerLabel(label) || rawHasFnKey(a.raw):
+				fn++
+			case isMouseLayerLabel(label):
+				mouse++
+			case isNavLayerLabel(label):
+				nav++
+			}
+		}
+	}
+
+	switch {
+	case mouse >= 3:
+		return "mouse"
+	case fn > 0 && shift > 0:
+		return "fn/shift"
+	case fn > 0 && ctrl > 0:
+		return "fn/ctrl"
+	case fn >= 3:
+		return "fn/media"
+	case nav >= 3:
+		return "nav"
+	case digits > 0 && symbols > 0:
+		return "num/sym"
+	case digits > 0:
+		return "num"
+	case symbols > 0:
+		return "sym"
+	case shift >= 3:
+		return "shift"
+	case ctrl >= 3:
+		return "ctrl"
+	case layerKeys >= 3:
+		return "layers"
+	}
+	return ""
+}
+
+func (kb *vilKeyboard) hintLayerName(layer int) string {
+	if layer >= 0 && layer < len(kb.layerNames) && kb.layerNames[layer] != "" {
+		return kb.layerNames[layer]
+	}
+	if inferred := kb.inferLayerName(layer); inferred != "" {
+		return inferred
+	}
+	return kb.layerName(layer)
+}
+
 func (kb *vilKeyboard) displayRows() int {
 	rows := len(kb.layers[0].matrix)
 	if kb.splitCols {
@@ -1424,7 +1566,7 @@ func (kb *vilKeyboard) hintText(h vilHint, found bool) string {
 
 	prefix := ""
 	if h.layer != 0 {
-		name := kb.layerName(h.layer)
+		name := kb.hintLayerName(h.layer)
 		if h.activator != nil {
 			verb := "hold"
 			switch h.activator.action.layerMode {
@@ -1452,7 +1594,7 @@ func (kb *vilKeyboard) hintText(h vilHint, found bool) string {
 	}
 
 	if prefix == "" {
-		return "base layer"
+		return "press " + key
 	}
 	return prefix + "press " + key
 }
@@ -1539,7 +1681,7 @@ func (t *typer) drawVilKeyboard(target rune) {
 	hintY := m.top + rows*m.keyH + (rows-1)*m.rowGap
 	hintText := kb.hintText(hint, found)
 	if preview {
-		hintText = "preview: " + kb.layerName(layer)
+		hintText = "preview: " + kb.hintLayerName(layer)
 	}
 	t.hintText = hintText
 	if t.chatsubo == nil {
