@@ -77,7 +77,7 @@ usage: nm \[OPTION\]... \[FILE\]
 
 -chatsubo
 
-: Show live Chatsubo commentary from Ollama in a box at the bottom of the screen. Uses **-ollama** and **-model**.
+: Show live Chatsubo commentary from Ollama in a box between the practice text and the keyboard. Uses **-ollama** and **-model**.
 
 -chatsubo-every *DURATION*
 
@@ -276,8 +276,9 @@ are determined exclusively by the input.
   nm -books ./books
   ```
 
-  Paragraphs shorter than 80 characters are skipped. Books can be combined with
-  **-vil** so layer and HRM guidance stays active.
+  Paragraphs shorter than 80 characters are skipped. The source filename is
+  shown below the paragraph. Books can be combined with **-vil** so layer and
+  HRM guidance stays active.
 
 ## OLLAMA
 
@@ -295,8 +296,8 @@ are determined exclusively by the input.
 
   With **-chatsubo**, nm sends the last interval's WPM, accuracy, errors and a
   short typed excerpt to Ollama and shows a laconic Gibson/cyberpunk comment in
-  a box at the bottom of the screen. The box reuses the keyboard's bottom
-  padding, so it does not take space from the typing text.
+  a box between the practice text and the keyboard. Text is wrapped to leave
+  room for the box, so the two do not overlap.
   **-chatsubo-every** controls the period (default `2m`; use `30s` for a quick
   test).
 

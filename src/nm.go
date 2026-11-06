@@ -628,14 +628,20 @@ func main() {
 	reflow := func(s string) string {
 		sw, sh := scr.Size()
 		top := sh
+		kbAbove := false
 		if _, kt, ok := typer.keyboardVisible(); ok {
 			top = kt
-		} else if chatsuboMode {
-			// Without a keyboard, reserve the bottom rows for the
-			// Chatsubo box instead of the keyboard's padding.
-			top -= 3
+			kbAbove = kt >= chatsuboMinAbove
 		}
+		// Leave room above the keyboard for the Chatsubo box and, when
+		// present, the attribution/timer line below the text.
 		maxLines := top - 2
+		if chatsuboMode && kbAbove {
+			maxLines = top - 5
+			if timeout != -1 {
+				maxLines--
+			}
+		}
 		if maxLines < 1 {
 			maxLines = 1
 		}

@@ -9,6 +9,10 @@ import (
 	"github.com/gdamore/tcell"
 )
 
+// chatsuboMinAbove is the minimum keyboard top row where a three-row box
+// plus attribution/timer can fit between the text and the keyboard.
+const chatsuboMinAbove = 8
+
 type chatsuboSnapshot struct {
 	Seconds  int
 	WPM      int
@@ -186,6 +190,45 @@ func (t *typer) maybeChatsubo(text, typed []rune, idx int) {
 	go c.request(snap, t.Scr)
 }
 
+// chatsuboPlacement centers the three-row Chatsubo box in the gap between
+// the text block and the keyboard. It returns -1 when there is not enough
+// room to draw the box without overlapping the text.
+func (t *typer) chatsuboPlacement(textY, textLines int, attribution string, timeLimit time.Duration) int {
+	_, sh := t.Scr.Size()
+	_, attribLines := calcStringDimensions(attribution)
+
+	blockBottom := textY + textLines - 1
+	if attribution != "" {
+		blockBottom = textY + textLines + attribLines
+	}
+	if timeLimit != -1 {
+		if row := textY + textLines + attribLines + 1; row > blockBottom {
+			blockBottom = row
+		}
+	}
+
+	top := sh
+	if _, kt, ok := t.keyboardVisible(); ok {
+		top = kt
+	}
+
+	const boxHeight = 3
+	gapTop := blockBottom + 1
+	maxTop := top - boxHeight
+	if maxTop < gapTop || maxTop < 1 {
+		return -1
+	}
+
+	y := gapTop + (maxTop-gapTop)/2
+	if y < 1 {
+		y = 1
+	}
+	if y > maxTop {
+		y = maxTop
+	}
+	return y
+}
+
 func (t *typer) drawChatsubo() {
 	if t.chatsubo == nil || t.Scr == nil {
 		return
@@ -196,11 +239,30 @@ func (t *typer) drawChatsubo() {
 	if width > 72 {
 		width = 72
 	}
-	if width < 30 || sh < 3 {
+	if width < 30 || sh < 6 {
 		return
 	}
 	x := (sw - width) / 2
+
+	// Prefer the gap computed for the current text block. When drawing
+	// without a started segment (for example in tests), fall back to sitting
+	// directly above the keyboard, or at the bottom when no keyboard fits.
 	y := sh - 3
+	if _, top, ok := t.keyboardVisible(); ok {
+		y = top - 3
+	}
+	if t.chatPlaced {
+		if t.chatTop < 0 {
+			// Not enough room above the keyboard; use the keyboard's
+			// bottom padding so the box stays visible.
+			y = sh - 3
+		} else {
+			y = t.chatTop
+		}
+	}
+	if y < 1 {
+		return
+	}
 
 	t.chatsubo.mu.Lock()
 	comment := t.chatsubo.comment

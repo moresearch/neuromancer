@@ -71,6 +71,6 @@ func generateBookTest(dir string) func() []segment {
 	return func() []segment {
 		b := books[rand.Intn(len(books))]
 		p := b.paragraphs[rand.Intn(len(b.paragraphs))]
-		return []segment{{p, ""}}
+		return []segment{{Text: p, Attribution: filepath.Base(b.path)}}
 	}
 }

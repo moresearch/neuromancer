@@ -2,6 +2,9 @@
  - Added `-arcade` galaxy shooter mode. Word-ships fire their letters at you;
    type a falling letter to shoot it down and clear a ship's whole word for a
    bonus.
+ - Moved the Chatsubo box between the practice text and the keyboard, and
+   reserve enough rows that text, attribution, and timers do not overlap it.
+ - Book mode now shows the source filename below the paragraph.
  - Fixed long unbroken tokens overflowing the configured practice width.
  - Fixed `-gen` leaving thinking enabled on reasoning models.
  - Fixed stale Chatsubo statistics after backspacing and zero-length tests.

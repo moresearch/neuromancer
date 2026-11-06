@@ -212,8 +212,8 @@ nm -books ./books
 ```
 
 Paragraphs shorter than 80 characters are skipped, which filters out chapter
-headings and page numbers. Combine books with a Vial layout to keep the layer
-guidance:
+headings and page numbers. The source filename is shown below the paragraph.
+Combine books with a Vial layout to keep the layer guidance:
 
 ```bash
 nm -vil ~/keyboards/sofle.vil \
@@ -256,9 +256,10 @@ nm -vil ~/keyboards/sofle.vil \
 ```
 
 Every two minutes, `nm` sends the last period's WPM, accuracy, errors, and a
-short typed excerpt to Ollama. The reply appears in a `chatsubo` box at the
-bottom of the screen in a laconic Gibson/cyberpunk style. The box reuses the
-keyboard's bottom padding, so it does not take space from the typing text.
+short typed excerpt to Ollama. The reply appears in a `chatsubo` box between
+the practice text and the keyboard in a laconic Gibson/cyberpunk style. Text is
+wrapped to leave room for the box, so the two do not overlap. On very short
+terminals the box falls back to the keyboard's bottom padding to stay visible.
 
 Options:
 
