@@ -12,6 +12,8 @@
  - Layers without `-layernames` are classified from their contents (num/sym,
    mouse, fn/media, fn/shift, fn/ctrl, nav, shift, ctrl), and guidance spells
    out the highlighted hold/layer/shift sequence before the target key.
+ - Fixed stale key labels and old hint text when the displayed layer changes;
+   the matrix area and hint line are cleared before each redraw.
  - Enlarged Chatsubo to a fixed 96x8 box with padded text and up to three
    wrapped commentary lines; a compact four-row version is used on short
    terminals. Guidance and model text are clipped to the body capacity.

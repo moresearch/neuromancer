@@ -1600,7 +1600,15 @@ func (kb *vilKeyboard) hintText(h vilHint, found bool) string {
 }
 
 func drawHintLine(scr tcell.Screen, y, x0, width int, text string, def tcell.Style) {
-	if width <= 0 || text == "" {
+	if width <= 0 {
+		return
+	}
+	// Clear the whole line first; otherwise a shorter guidance string leaves
+	// the tail of the previous layer's hint behind.
+	for i := 0; i < width; i++ {
+		scr.SetContent(x0+i, y, ' ', nil, def)
+	}
+	if text == "" {
 		return
 	}
 	r := []rune(text)
@@ -1647,6 +1655,16 @@ func (t *typer) drawVilKeyboard(target rune) {
 
 	width := kb.width(m.keyWidth, m.keyGap)
 	x0 := (sw - width) / 2
+	rows := kb.displayRows()
+
+	// Clear the whole matrix before drawing. Layers can differ in which cells
+	// are absent, and a cell that is empty in the new layer must not keep the
+	// old layer's label.
+	for y := m.top; y < m.top+rows*(m.keyH+m.rowGap); y++ {
+		for x := x0; x < x0+width; x++ {
+			t.Scr.SetContent(x, y, ' ', nil, t.defaultStyle)
+		}
+	}
 
 	wrongRow, wrongCol := -1, -1
 	if t.wrongKeyValid() {
@@ -1655,7 +1673,6 @@ func (t *typer) drawVilKeyboard(target rune) {
 		}
 	}
 
-	rows := kb.displayRows()
 	for r := 0; r < rows; r++ {
 		y := m.top + r*(m.keyH+m.rowGap)
 
