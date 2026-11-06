@@ -622,7 +622,7 @@ func main() {
 	typer.ShowWpm = showWpm
 	typer.vil = vilKB
 	if chatsuboMode {
-		typer.chatsubo = newChatsubo(ollamaURL, ollamaModel, chatsuboEvery)
+		typer.chatsubo = newChatsubo(ollamaURL, ollamaModel, chatsuboEvery, chatsuboLayoutSummary(vilKB))
 	}
 
 	reflow := func(s string) string {

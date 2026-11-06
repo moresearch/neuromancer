@@ -9,17 +9,21 @@ import (
 	"github.com/gdamore/tcell"
 )
 
-// chatsuboMinAbove is the minimum keyboard top row where a four-row box
-// plus attribution/timer can fit between the text and the keyboard.
-const chatsuboMinAbove = 8
-
-// The box has a fixed size. Its body holds exactly two text lines: the key
-// guidance line and the model commentary line. Each line has
-// chatsuboBoxWidth-4 usable runes; every string is clipped to that capacity.
+// The box has a fixed preferred size. On short terminals it falls back to a
+// compact four-row version in the keyboard's bottom padding.
 const (
-	chatsuboBoxWidth   = 72
-	chatsuboBoxHeight  = 4
-	chatsuboReplyRunes = chatsuboBoxWidth - 4
+	chatsuboBoxWidth      = 96
+	chatsuboBoxHeight     = 8
+	chatsuboCompactHeight = 4
+	chatsuboMinAbove      = chatsuboBoxHeight + 4
+
+	// Two columns of horizontal padding inside each border, and one blank
+	// padding row above and below the full-size body.
+	chatsuboBodyCols = chatsuboBoxWidth - 6
+	chatsuboBodyRows = chatsuboBoxHeight - 4
+
+	// Guidance uses one body row; the LLM can fill the rest.
+	chatsuboReplyRunes = (chatsuboBodyRows - 1) * chatsuboBodyCols
 )
 
 type chatsuboSnapshot struct {
@@ -29,6 +33,8 @@ type chatsuboSnapshot struct {
 	Errors   int
 	Chars    int
 	Recent   string
+	Hint     string
+	Target   string
 }
 
 type chatsubo struct {
@@ -39,26 +45,55 @@ type chatsubo struct {
 	interval time.Duration
 	comment  string
 	busy     bool
+	layout   string
+	history  []string
 
 	lastCorrect int
 	lastErrors  int
 	lastTime    time.Time
 }
 
-func newChatsubo(url, model string, interval time.Duration) *chatsubo {
+func newChatsubo(url, model string, interval time.Duration, layout ...string) *chatsubo {
 	if interval <= 0 {
 		interval = 120 * time.Second
 	}
 	if interval < 5*time.Second {
 		interval = 5 * time.Second
 	}
-	return &chatsubo{
+	c := &chatsubo{
 		url:      url,
 		model:    model,
 		interval: interval,
 		comment:  "jacked in. listening.",
 		lastTime: time.Now(),
 	}
+	if len(layout) > 0 {
+		c.layout = layout[0]
+	}
+	return c
+}
+
+// chatsuboLayoutSummary gives the model a compact description of the loaded
+// .vil, including every layer matrix and the key which activates each layer.
+func chatsuboLayoutSummary(kb *vilKeyboard) string {
+	if kb == nil {
+		return "built-in Colemak-DH matrix (no .vil loaded)"
+	}
+
+	var b strings.Builder
+	b.WriteString(kb.info())
+	b.WriteString("\nlayer activators:\n")
+	for i := 1; i < len(kb.layers); i++ {
+		if a := kb.findLayerActivator(i); a != nil {
+			fmt.Fprintf(&b, "- %s (layer %d): hold or tap %s (row %d, col %d)\n",
+				kb.layerName(i), i, a.action.label, a.row, a.col)
+		} else {
+			fmt.Fprintf(&b, "- %s (layer %d): no activator key found\n", kb.layerName(i), i)
+		}
+	}
+	b.WriteString("labels: C/A/G/S prefixes are Ctrl/Alt/Gui/Shift home-row mods; " +
+		"MO/LT/TG/TO/DF/TT are layer keys; ___ is transparent; . is unused.\n")
+	return b.String()
 }
 
 func (c *chatsubo) resetSegment() {
@@ -86,14 +121,33 @@ func chatsuboClipRunes(s string, max int) string {
 }
 
 func (c *chatsubo) ask(snap chatsuboSnapshot) (string, error) {
+	c.mu.Lock()
+	layout := c.layout
+	history := append([]string(nil), c.history...)
+	c.mu.Unlock()
+
 	system := fmt.Sprintf(`You are Chatsubo, a laconic Gibson-style AI typing coach.
-Comment on the typist's last interval in one short sentence, max %d characters.
+The typist's Vial layout is supplied in every request. Study it and teach one
+concrete thing they can do on a specific layer: name the layer, how to
+activate it, and the key to press. Then add one short remark about the last
+interval if useful. Never invent keys, layers, or shortcuts not present in the
+layout. Keep the whole reply to one to three short sentences, max %d characters.
 Be noir/cyberpunk, specific, and not cruel.
 No markdown, no emoji, no quotation marks.`, chatsuboReplyRunes)
 
+	if layout == "" {
+		layout = "no layout information loaded"
+	}
+	tips := "none"
+	if len(history) > 0 {
+		tips = "- " + strings.Join(history, "\n- ")
+	}
+
 	user := fmt.Sprintf(
-		"interval_seconds=%d\nwpm=%d\naccuracy=%.1f\nerrors=%d\nchars=%d\nrecent_typed=%q",
+		"layout_summary:\n%s\n\ncurrent_guidance: %s\ncurrent_target: %q\n\ninterval_seconds=%d\nwpm=%d\naccuracy=%.1f\nerrors=%d\nchars=%d\nrecent_typed=%q\n\nprevious_tips:\n%s\n\nDo not repeat a previous tip.",
+		layout, snap.Hint, snap.Target,
 		snap.Seconds, snap.WPM, snap.Accuracy, snap.Errors, snap.Chars, snap.Recent,
+		tips,
 	)
 
 	text, err := requestOllamaText(c.url, c.model, system, user, 512)
@@ -116,6 +170,10 @@ func (c *chatsubo) request(snap chatsuboSnapshot, scr tcell.Screen) {
 		c.comment = chatsuboClipRunes("link lost: "+err.Error(), chatsuboReplyRunes)
 	} else {
 		c.comment = chatsuboClipRunes(comment, chatsuboReplyRunes)
+		c.history = append(c.history, c.comment)
+		if len(c.history) > 3 {
+			c.history = c.history[len(c.history)-3:]
+		}
 	}
 	c.busy = false
 	c.mu.Unlock()
@@ -195,6 +253,15 @@ func (t *typer) maybeChatsubo(text, typed []rune, idx int) {
 	chars := dCorrect + dErrors
 	wpm := int((float64(dCorrect) / 5) / elapsed.Minutes())
 	acc := float64(dCorrect) / float64(chars) * 100
+
+	target := rune(0)
+	if idx < len(text) {
+		target = text[idx]
+	}
+	targetText := ""
+	if target != 0 {
+		targetText = string(target)
+	}
 	snap := chatsuboSnapshot{
 		Seconds:  int(elapsed.Seconds()),
 		WPM:      wpm,
@@ -202,6 +269,8 @@ func (t *typer) maybeChatsubo(text, typed []rune, idx int) {
 		Errors:   dErrors,
 		Chars:    chars,
 		Recent:   recentTyped(typed[:idx], 32),
+		Hint:     t.hintFor(target),
+		Target:   targetText,
 	}
 
 	go c.request(snap, t.Scr)
@@ -255,28 +324,41 @@ func (t *typer) drawChatsubo() {
 	if width > sw-8 {
 		width = sw - 8
 	}
-	if width < 30 || sh < chatsuboBoxHeight+1 {
+	if width < 30 || sh < chatsuboCompactHeight+1 {
 		return
 	}
-	x := (sw - width) / 2
 
-	// Prefer the gap computed for the current text block. When drawing
-	// without a started segment (for example in tests), fall back to sitting
-	// directly above the keyboard, or at the bottom when no keyboard fits.
-	y := sh - chatsuboBoxHeight
-	if _, top, ok := t.keyboardVisible(); ok {
-		y = top - chatsuboBoxHeight
-	}
+	height := chatsuboBoxHeight
+	y := sh - height
 	if t.chatPlaced {
 		if t.chatTop < 0 {
-			// Not enough room above the keyboard; use the keyboard's
-			// bottom padding so the box stays visible.
-			y = sh - chatsuboBoxHeight
+			// Not enough room above the keyboard; use the compact version in
+			// the keyboard's bottom padding so the box stays visible.
+			height = chatsuboCompactHeight
+			y = sh - height
 		} else {
 			y = t.chatTop
 		}
+	} else if _, top, ok := t.keyboardVisible(); ok && top >= chatsuboMinAbove {
+		// Drawing without a started segment (for example in tests): use the
+		// preferred size directly above the keyboard when it fits.
+		y = top - height
+	} else {
+		height = chatsuboCompactHeight
+		y = sh - height
 	}
-	if y < 1 {
+	if y < 1 || y+height > sh {
+		return
+	}
+
+	x := (sw - width) / 2
+	contentRows := height - 2
+	topPad, bottomPad := 0, 0
+	if height >= chatsuboBoxHeight {
+		contentRows = height - 4
+		topPad, bottomPad = 1, 1
+	}
+	if contentRows < 1 {
 		return
 	}
 
@@ -294,19 +376,62 @@ func (t *typer) drawChatsubo() {
 	drawString(t.Scr, x, y, top, -1, border)
 
 	inner := width - 2
-	bodyCols := inner - 2
+	bodyCols := inner - 4 // two columns of padding on each side
+	if bodyCols < 1 {
+		return
+	}
 	drawBoxLine := func(row int, text string, style tcell.Style) {
 		r := []rune(strings.Join(strings.Fields(text), " "))
 		if len(r) > bodyCols {
 			r = r[:bodyCols]
 		}
-		line := "│ " + string(r) + strings.Repeat(" ", bodyCols-len(r)) + " │"
+		line := "│  " + string(r) + strings.Repeat(" ", bodyCols-len(r)) + "  │"
 		drawString(t.Scr, x, row, line, -1, style)
 	}
+	drawBlank := func(row int) {
+		line := "│" + strings.Repeat(" ", width-2) + "│"
+		drawString(t.Scr, x, row, line, -1, t.defaultStyle)
+	}
 
-	drawBoxLine(y+1, t.hintText, guideStyle)
-	drawBoxLine(y+2, comment, t.defaultStyle)
+	row := y + 1
+	if topPad > 0 {
+		drawBlank(row)
+		row++
+	}
+
+	rowsLeft := contentRows
+	guidance := strings.Join(strings.Fields(t.hintText), " ")
+	if guidance != "" && rowsLeft > 0 {
+		drawBoxLine(row, chatsuboClipRunes(guidance, bodyCols), guideStyle)
+		row++
+		rowsLeft--
+	}
+
+	comment = strings.Join(strings.Fields(comment), " ")
+	if comment == "" {
+		comment = "jacked in. listening."
+	}
+	if rowsLeft > 0 {
+		for _, line := range strings.Split(wordWrap(comment, bodyCols), "\n") {
+			if rowsLeft == 0 {
+				break
+			}
+			drawBoxLine(row, strings.TrimSpace(line), t.defaultStyle)
+			row++
+			rowsLeft--
+		}
+	}
+	for rowsLeft > 0 {
+		drawBoxLine(row, "", t.defaultStyle)
+		row++
+		rowsLeft--
+	}
+
+	if bottomPad > 0 {
+		drawBlank(row)
+		row++
+	}
 
 	bottom := "╰" + strings.Repeat("─", width-2) + "╯"
-	drawString(t.Scr, x, y+chatsuboBoxHeight-1, bottom, -1, border)
+	drawString(t.Scr, x, y+height-1, bottom, -1, border)
 }

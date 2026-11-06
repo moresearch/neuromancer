@@ -308,6 +308,19 @@ func (t *typer) drawKeyboard(target rune) {
 	t.drawBuiltinKeyboard(target)
 }
 
+// hintFor returns the key/layer guidance for target using the loaded Vial
+// keymap, or the built-in Colemak-DH matrix when no .vil is loaded.
+func (t *typer) hintFor(target rune) string {
+	if target == 0 || target == '\n' {
+		return ""
+	}
+	if t.vil != nil {
+		hint, found := t.vil.findRune(target)
+		return t.vil.hintText(hint, found)
+	}
+	return builtinHint(target)
+}
+
 // builtinHint describes the key needed for target on the built-in Colemak-DH
 // matrix. The Chatsubo box uses this guidance when no .vil is loaded.
 func builtinHint(target rune) string {

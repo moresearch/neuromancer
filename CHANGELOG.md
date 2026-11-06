@@ -6,8 +6,12 @@
    reserve enough rows that text, attribution, and timers do not overlap it.
    The box now shows the layer/shift guidance line first, then the model
    commentary.
- - Gave Chatsubo a fixed 72x4 size and clip both body lines (guidance and LLM
-   reply) to the box capacity so text cannot overflow.
+ - Chatsubo now studies the loaded `.vil` (layers, matrices, activators, and
+   HRMs), keeps the last three tips to avoid repeats, and answers with concrete
+   tips for using specific layers.
+ - Enlarged Chatsubo to a fixed 96x8 box with padded text and up to three
+   wrapped commentary lines; a compact four-row version is used on short
+   terminals. Guidance and model text are clipped to the body capacity.
  - Shift guidance now recommends a shift key on the opposite split half from
    the key being pressed, preferring the other hand's HRM shift.
  - Book mode now shows the source filename below the paragraph.

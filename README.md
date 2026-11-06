@@ -258,17 +258,21 @@ nm -vil ~/keyboards/sofle.vil \
    -chatsubo -model qwen3.5:0.8b
 ```
 
-Every two minutes, `nm` sends the last period's WPM, accuracy, errors, and a
-short typed excerpt to Ollama. The reply appears in a `chatsubo` box between
-the practice text and the keyboard in a laconic Gibson/cyberpunk style. Text is
-wrapped to leave room for the box, so the two do not overlap. On very short
-terminals the box falls back to the keyboard's bottom padding to stay visible.
+Every two minutes, `nm` sends the last period's WPM, accuracy, errors, a short
+typed excerpt, the current key guidance, and the loaded `.vil` to Ollama. The
+model studies every layer, the layer activator keys, and the HRMs, then gives a
+concrete tip about doing something on a named layer, for example “Sym layer:
+hold LT2 + w for @”. It keeps the last three tips in the prompt so it does not
+repeat itself. Text is wrapped to leave room for the box, so the two do not
+overlap. On very short terminals the box falls back to a compact version in the
+keyboard's bottom padding to stay visible.
 
-The box has a fixed four-row, 72-column size (shrinking only when the terminal
-is narrower). It shows the current key guidance first, for example
-`hold t (shift) + press p`, followed by the model's commentary. Both lines are
-clipped to the box body capacity, so neither the guidance nor the LLM reply can
-grow or spill outside it.
+The full box is a fixed eight-row, 96-column size (shrinking only when the
+terminal is narrower), with two columns of horizontal padding and one blank
+padding row above and below the body. It shows the current key guidance first,
+for example `hold o (shift) + press p`, followed by up to three wrapped lines of
+model commentary. Guidance and commentary are clipped to the body capacity, so
+they cannot grow or spill outside the box.
 
 Options:
 

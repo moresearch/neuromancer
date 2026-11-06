@@ -297,14 +297,19 @@ are determined exclusively by the input.
   unsupported character, nm refuses the drill instead of showing an impossible
   target.
 
-  With **-chatsubo**, nm sends the last interval's WPM, accuracy, errors and a
-  short typed excerpt to Ollama and shows a laconic Gibson/cyberpunk comment in
-  a box between the practice text and the keyboard. Text is wrapped to leave
-  room for the box, so the two do not overlap. The box has a fixed four-row,
-  72-column size (shrinking only on narrower terminals). It shows the current
-  layer/shift guidance line first (for example `hold t (shift) + press p`),
-  followed by the model's commentary. Both lines are clipped to the box body
-  capacity, so guidance and LLM output cannot spill outside the box.
+  With **-chatsubo**, nm sends the last interval's WPM, accuracy, errors, a
+  short typed excerpt, the current key guidance, and the loaded `.vil` to
+  Ollama. The model studies every layer, layer activator, and HRM, then gives a
+  concrete tip about doing something on a named layer. It keeps the last three
+  tips in the prompt to avoid repeats. Text is wrapped to leave room for the
+  box, so the two do not overlap. The full box has a fixed eight-row, 96-column
+  size (shrinking only on narrower terminals), with two columns of horizontal
+  padding and one blank padding row above and below the body. It shows the
+  current layer/shift guidance line first (for example
+  `hold o (shift) + press p`), followed by up to three wrapped lines of model
+  commentary. Guidance and commentary are clipped to the body capacity, so they
+  cannot spill outside the box. On short terminals a compact four-row version
+  is used in the keyboard's bottom padding.
   **-chatsubo-every** controls the period (default `2m`; use `30s` for a quick
   test).
 
