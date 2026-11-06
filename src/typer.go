@@ -50,6 +50,11 @@ type typer struct {
 	// Most recent incorrect key, highlighted red on the keyboard matrix.
 	wrongKey   rune
 	wrongUntil time.Time
+
+	// Optional Vial keymap; when set it replaces the built-in Colemak-DH matrix.
+	vil          *vilKeyboard
+	previewLayer int
+	blinkOn      bool
 }
 
 func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
@@ -70,9 +75,11 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 	}
 
 	return &typer{
-		Scr:      scr,
-		SkipWord: true,
-		tty:      tty,
+		Scr:          scr,
+		SkipWord:     true,
+		tty:          tty,
+		previewLayer: -1,
+		blinkOn:      true,
 
 		defaultStyle:        def,
 		correctStyle:        correctStyle,
@@ -376,6 +383,27 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 					deleteWord()
 				}
 
+			case tcell.KeyF1, tcell.KeyF2, tcell.KeyF3:
+				if t.vil != nil {
+					n := len(t.vil.layers)
+					switch key {
+					case tcell.KeyF1:
+						if t.previewLayer < 0 {
+							t.previewLayer = 0
+						} else {
+							t.previewLayer = (t.previewLayer + 1) % n
+						}
+					case tcell.KeyF2:
+						if t.previewLayer < 0 {
+							t.previewLayer = 0
+						} else {
+							t.previewLayer = (t.previewLayer - 1 + n) % n
+						}
+					case tcell.KeyF3:
+						t.previewLayer = -1
+					}
+				}
+
 			case tcell.KeyBackspace, tcell.KeyBackspace2:
 				if !t.DisableBackspace {
 					if ev.Modifiers() == tcell.ModAlt || ev.Modifiers() == tcell.ModCtrl {
@@ -433,6 +461,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 				return
 			}
 
+			t.blinkOn = !t.blinkOn
 			redraw()
 		}
 	}

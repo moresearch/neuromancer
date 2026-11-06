@@ -5,6 +5,10 @@ PREFIX := /usr/local
 all:
 	go build -o bin/nm src/*.go
 
+.PHONY: test
+test:
+	go test ./src/
+
 .PHONY: install
 install:
 	install -d $(DESTDIR)$(PREFIX)/bin

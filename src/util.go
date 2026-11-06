@@ -81,6 +81,14 @@ func init() {
 }
 
 func randomText(n int, words []string) string {
+	if len(words) == 0 {
+		return ""
+	}
+	if len(words) == 1 {
+		r := strings.TrimSpace(strings.Repeat(words[0]+" ", n))
+		return strings.Replace(r, "\n", " \n", -1)
+	}
+
 	r := ""
 
 	var last string

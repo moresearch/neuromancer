@@ -8,10 +8,21 @@ Modes
                         have the following form:
 
                         [{"text": "foo", attribution: "bar"}]
+    -vil FILE           Load a Vial (.vil) keymap and show the layout and the
+                        layer required for the next character.
+    -layernames NAMES   Comma separated layer names for -vil, e.g.
+                        base,nav,media,num,sym,fun.
+    -vil-split MODE     Split the Vial matrix into halves: auto, rows, cols
+                        or none (default: auto).
+    -vil-info           Print the parsed Vial matrix and layers, then exit.
 
 Word Mode
     -n GROUPSZ          Sets the number of words which constitute a group.
     -g NGROUPS          Sets the number of groups which constitute a test.
+    -drill              With -vil, generate a drill from characters that
+                        require a non-base layer.
+    -hrm                With -vil, drill shifted characters using your
+                        home-row-mod shift keys.
 
 File Mode
     -start PARAGRAPH    The offset of the starting paragraph, set this to 0 to 
@@ -24,7 +35,8 @@ Aesthetics
 
     The Colemak-DH (matrix) layout is shown at the bottom of the screen. The
     key producing the next character is highlighted in green, and the most
-    recent wrong key is highlighted in red.
+    recent wrong key is highlighted in red. With -vil the loaded Vial layout
+    is shown instead; the layer or shift key to hold is highlighted in cyan.
 
 Test Parameters
     -t SECONDS          Terminate the test after the given number of seconds.

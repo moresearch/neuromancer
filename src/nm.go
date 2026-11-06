@@ -171,10 +171,21 @@ Modes
                         have the following form:
 
                         [{"text": "foo", attribution: "bar"}]
+    -vil FILE           Load a Vial (.vil) keymap. The layout and the layer
+                        required for the next character are shown while typing.
+    -layernames NAMES   Comma separated layer names for -vil, e.g.
+                        base,nav,media,num,sym,fun.
+    -vil-split MODE     Split the Vial matrix into halves: auto, rows, cols
+                        or none (default: auto).
+    -vil-info           Print the parsed Vial layers and exit.
 
 Word Mode
     -n GROUPSZ          Sets the number of words which constitute a group.
     -g NGROUPS          Sets the number of groups which constitute a test.
+    -drill              With -vil, generate a drill from characters that
+                        require a non-base layer.
+    -hrm                With -vil, drill shifted characters using your
+                        home-row-mod shift keys.
 
 File Mode
     -start PARAGRAPH    The offset of the starting paragraph, set this to 0 to
@@ -192,7 +203,9 @@ Aesthetics
 
 The Colemak-DH (matrix) layout is shown at the bottom of the screen. The key
 producing the next character is highlighted in green; pressing a wrong key
-highlights that key's location in red.
+highlights that key's location in red. With -vil the loaded Vial layout is
+shown instead, and the layer/shift key needed for the next character is
+highlighted in cyan.
 
 Test Parameters
     -t SECONDS          Terminate the test after the given number of seconds.
@@ -253,9 +266,15 @@ func main() {
 	var listFlag string
 	var wordFile string
 	var quoteFile string
+	var vilPath string
+	var layerNames string
+	var vilSplit string
+	var vilInfo bool
 
 	var themeName string
 	var showWpm bool
+	var drillMode bool
+	var hrmMode bool
 	var multiMode bool
 	var versionFlag bool
 	var boldFlag bool
@@ -274,8 +293,14 @@ func main() {
 
 	flag.StringVar(&wordFile, "words", "", "")
 	flag.StringVar(&quoteFile, "quotes", "", "")
+	flag.StringVar(&vilPath, "vil", "", "")
+	flag.StringVar(&layerNames, "layernames", "", "")
+	flag.StringVar(&vilSplit, "vil-split", "auto", "")
+	flag.BoolVar(&vilInfo, "vil-info", false, "")
 
 	flag.BoolVar(&showWpm, "showwpm", false, "")
+	flag.BoolVar(&drillMode, "drill", false, "")
+	flag.BoolVar(&hrmMode, "hrm", false, "")
 	flag.BoolVar(&noSkip, "noskip", false, "")
 	flag.BoolVar(&normalCursor, "blockcursor", false, "")
 	flag.BoolVar(&noBackspace, "nobackspace", false, "")
@@ -317,6 +342,23 @@ func main() {
 		os.Setenv("TCELL_TRUECOLOR", "disable")
 	}
 
+	var vilKB *vilKeyboard
+	if vilPath != "" {
+		vilKB, err = loadVil(vilPath, layerNames)
+		if err != nil {
+			die("Failed to load %s: %v", vilPath, err)
+		}
+		if err := vilKB.setSplitMode(vilSplit); err != nil {
+			die("Invalid -vil-split: %v", err)
+		}
+		if vilInfo {
+			fmt.Print(vilKB.info())
+			os.Exit(0)
+		}
+	} else if vilSplit != "auto" || vilInfo {
+		die("-vil-split and -vil-info require -vil <file>")
+	}
+
 	reflow := func(s string) string {
 		sw, _ := scr.Size()
 
@@ -332,6 +374,22 @@ func main() {
 	}
 
 	switch {
+	case drillMode:
+		if vilKB == nil {
+			die("-drill requires -vil <file>")
+		}
+		testFn = generateVilDrill(vilKB, n, g)
+		if testFn == nil {
+			die("-drill: no layer-only printable characters found in %s", vilPath)
+		}
+	case hrmMode:
+		if vilKB == nil {
+			die("-hrm requires -vil <file>")
+		}
+		testFn = generateHrmDrill(vilKB, n, g)
+		if testFn == nil {
+			die("-hrm: no home-row-mod shift keys found in %s", vilPath)
+		}
 	case wordFile != "":
 		testFn = generateWordTest(wordFile, n, g)
 	case quoteFile != "":
@@ -386,9 +444,10 @@ func main() {
 	typer.DisableBackspace = noBackspace
 	typer.BlockCursor = normalCursor
 	typer.ShowWpm = showWpm
+	typer.vil = vilKB
 
 	if timeout != -1 {
-		timeout *= 1E9
+		timeout *= 1e9
 	}
 
 	var tests [][]segment
@@ -420,7 +479,7 @@ func main() {
 				idx--
 			}
 		case TyperComplete:
-			cpm := int(float64(ncorrect) / (float64(t) / 60E9))
+			cpm := int(float64(ncorrect) / (float64(t) / 60e9))
 			wpm := cpm / 5
 			accuracy := float64(ncorrect) / float64(nerrs+ncorrect) * 100
 

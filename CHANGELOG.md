@@ -2,6 +2,36 @@
  - Renamed the program from tt to nm.
  - Added the Colemak-DH (matrix) keyboard display. The key for the next
    character is highlighted in green and wrong keys flash red.
+ - Added `-vil` to load Vial keymaps. The loaded layers are rendered and the
+   layer/shift key needed for the next character is highlighted in cyan.
+ - Split the keyboard display into halves, mark the active half with `L`/`R`,
+   and dim the inactive half while typing.
+ - Enlarged the keyboard display, widened key spacing and the split gap, and
+   added bottom padding.
+ - Draw keys as beveled button keycaps, removed the title, center divider, and
+   L/R markers, and widened the split gap.
+ - Tint only the ten resting keys (four finger homes per hand plus one thumb
+   per hand) dim green.
+ - Locate the eight finger homes from the base-layer `a r s t` / `n e i o`
+   characters instead of assuming the extra Sofle column is on the outside.
+ - Blink the key that should be pressed.
+ - Replaced the blocky keycaps with clean rounded/pill keycaps.
+ - Accept numeric QMK keycodes and flat Sofle/Corne `LAYOUT` lists in `.vil`
+   files, and added `-vil-info` to dump the parsed layers.
+ - Added `F1`/`F2` layer preview and `F3` to return to automatic layer selection.
+ - Recognize Home Row Mods (`LCTL_T`, `LSFT_T`, `LALT_T`, `LGUI_T`, `MT(...)`)
+   and print them in `-vil-info`.
+ - Added `-hrm` to drill shifted characters using an HRM shift key.
+ - Show HRM encoding Vial-style: modifier tag on the keycap top border, tap
+   letter in the middle. Compact pills show `[C a]`. Widened the keycaps so it
+   fits.
+ - Enlarged the keycaps to three rows and packed them tightly, with the split
+   gap and inter-key spacing roughly halved.
+ - Only the border of the key to press blinks (green/white); no background fill
+   and no finger-movement highlight.
+ - Draw the ten resting keys with green labels and normal borders.
+ - Documented that a terminal cannot observe pure layer-key presses; layer
+   preview uses F1/F2 and the displayed layer follows the next character.
  - Configuration and state now live in `~/.nm` and `~/.local/share/nm`.
 
 # 0.4.2:
