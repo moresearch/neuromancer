@@ -2,9 +2,15 @@ package main
 
 import (
 	"sync"
+	"time"
 
 	"github.com/gdamore/tcell"
 )
+
+// layerTapDelay keeps a layer-tap key (for example space on LT1) from flashing
+// its layer for the duration of a normal tap. A held layer key still activates
+// immediately when another key is pressed.
+const layerTapDelay = 180 * time.Millisecond
 
 // layerTracker follows the physical layer keys by polling the Vial raw HID
 // matrix. Layer is -1 when no layer key is held, so the display falls back to
@@ -19,8 +25,9 @@ type layerTracker struct {
 	done      chan struct{}
 	closeOnce sync.Once
 
-	prevPressed map[[2]int]bool
-	toggled     uint32
+	prevPressed  map[[2]int]bool
+	pressedSince map[[2]int]time.Time
+	toggled      uint32
 }
 
 func (t *layerTracker) Layer() int {
@@ -80,6 +87,13 @@ func (t *layerTracker) updateActive(pressed map[[2]int]bool) {
 		t.setLayer(-1)
 		return
 	}
+	if t.prevPressed == nil {
+		t.prevPressed = map[[2]int]bool{}
+	}
+	if t.pressedSince == nil {
+		t.pressedSince = map[[2]int]time.Time{}
+	}
+	now := time.Now()
 
 	for pos := range pressed {
 		if t.prevPressed[pos] {
@@ -100,13 +114,39 @@ func (t *layerTracker) updateActive(pressed map[[2]int]bool) {
 		}
 	}
 
+	for pos := range t.pressedSince {
+		if !pressed[pos] {
+			delete(t.pressedSince, pos)
+		}
+	}
+
+	hasOtherKey := false
+	for pos := range pressed {
+		a := t.kb.actionAt(0, pos[0], pos[1])
+		if a.layerMode == "" {
+			hasOtherKey = true
+		}
+		if a.layerMode == "LT" || a.layerMode == "TT" {
+			if _, ok := t.pressedSince[pos]; !ok {
+				t.pressedSince[pos] = now
+			}
+		}
+	}
+
 	active := t.toggled
 	for pos := range pressed {
 		a := t.kb.actionAt(0, pos[0], pos[1])
 		switch a.layerMode {
-		case "MO", "LT", "OSL", "TT", "LM":
+		case "MO", "OSL", "LM":
 			if a.layer > 0 {
 				active |= 1 << uint(a.layer)
+			}
+		case "LT", "TT":
+			if a.layer > 0 {
+				since := t.pressedSince[pos]
+				if hasOtherKey || now.Sub(since) >= layerTapDelay {
+					active |= 1 << uint(a.layer)
+				}
 			}
 		}
 	}
