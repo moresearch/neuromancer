@@ -59,10 +59,6 @@ usage: nm \[OPTION\]... \[FILE\]
 
 : Follow physical layer keys by polling the Vial raw HID switch matrix on Linux. Enabled by default; use **-layer-track=false** to disable. Set `NM_HIDRAW=/dev/hidrawN` to choose the device, which must be readable/writable by your user and unlocked in Vial.
 
--arcade
-
-: Galaxy arcade mode. Words arrive as enemy ships and fire their letters at you. Type a falling letter to shoot it down; clear every letter of a ship's word to destroy it for a bonus. `R`/`Enter` restarts after game over and `Esc` quits.
-
 -books *DIR*
 
 : Draw random paragraphs from `.txt`, `.md`, `.text`, or `.org` files in DIR. Paragraphs shorter than 80 characters are skipped.
@@ -264,22 +260,6 @@ are determined exclusively by the input.
   nm -vil ~/sofle.vil lesson.txt
   ```
 
-## ARCADE
-
-  **-arcade** is a self-contained galaxy shooter. Word-ships drift across the
-  top of the screen and fire the letters of their word downward. Type the
-  letters to shoot them down; let a letter reach your ship and you lose one of
-  three hulls. Destroy every letter of a ship's word to blow the ship up. Waves add
-  ships and speed as your score rises.
-
-  ```
-  nm -arcade
-  nm -arcade -t 180
-  ```
-
-  **-t SECONDS** sets a time limit and **-oneshot** exits when the run ends.
-  Arcade mode cannot be combined with the other input modes or **-chatsubo**.
-
 ## BOOKS
 
   Files ending in `.txt`, `.md`, `.text`, or `.org` under the given directory are
@@ -340,45 +320,97 @@ are determined exclusively by the input.
 
 # EXAMPLES
 
-Creates a series of tests each consisting of a random quote drawn from the
-builtin quote file 'en'.
+Practice 50 common English words:
+```
+nm
+```
+
+Practice 100 words in four groups:
+```
+nm -n 25 -g 4
+```
+
+Run a timed test and exit:
+```
+nm -t 60 -oneshot
+```
+
+Use a built-in quote list:
 ```
 nm -quotes en
 ```
 
-Creates a series of tests each consisting of 10 random words drawn from
-words.txt
+Use a text file. Flags must come before the positional file:
 ```
-nm -words words.txt -n 10
-```
-
-Starts a sequence of tests in which each test consists of a paragraph from war
-and peace starting with paragraph 1.
-```
-nm ~/war_and_peace.txt -start 1
+nm -start 0 ~/war_and_peace.txt
+nm -raw ~/war_and_peace.txt
+nm -multi ~/war_and_peace.txt
 ```
 
-Produces a test consisting of 40 random words draw from 
-the system dictionary (similar to 'nm -n 40').
+Practice random dictionary words from stdin:
 ```
-shuf -n 40 /usr/share/dict/words|nm
-```
-
-Starts a test consisting of two randomly drawn quotes from api.quotable.io and
-prints the output of each test to STDOUT in csv format.
-```
-curl https://api.quotable.io/quotes|\
-    jq '[.results[]|.text=.content|.attribution=.author][:2]'|\
-    nm -quotes - -norreport -csv
+shuf -n 40 /usr/share/dict/words | nm
 ```
 
-Starts a new typing test which uses the nm source as input:
-
+Practice quotes fetched from an API and write CSV:
 ```
-curl -LsS https://raw.githubusercontent.com/moresearch/neuromancer/master/src/nm.go | head -n 20 | nm -noskip -raw
+curl https://api.quotable.io/quotes |\
+    jq '[.results[]|.text=.content|.attribution=.author][:2]' |\
+    nm -quotes - -noreport -csv
 ```
 
-Modify to taste.
+Load a Vial layout:
+```
+VIL=~/keyboards/sofle.vil
+
+nm -vil "$VIL"
+nm -vil "$VIL" -layernames base,mouse,num,fn,shift,ctrl
+nm -vil "$VIL" -vil-info
+nm -vil "$VIL" -drill
+nm -vil "$VIL" -hrm
+nm -vil "$VIL" lesson.txt
+```
+
+Follow physical layer keys through Vial raw HID on Linux:
+```
+nm -vil "$VIL"
+```
+
+Disable physical layer tracking and use F1/F2 previews instead:
+```
+nm -vil "$VIL" -layer-track=false
+```
+
+Practice random book paragraphs and show the source filename:
+```
+nm -vil "$VIL" -books ./books
+```
+
+Generate a drill with Ollama:
+```
+nm -model qwen3:0.6b -gen "home row words"
+nm -vil "$VIL" -model qwen3:0.6b -gen "sym layer, avoid numbers"
+```
+
+Add live layout-aware commentary:
+```
+nm -vil "$VIL" -books ./books \
+    -chatsubo -chatsubo-every 1m -model qwen3.5:0.8b
+```
+
+Scripted runs:
+```
+nm -oneshot -noreport -t 60
+nm -csv -oneshot >> ~/wpm.csv
+nm -json -oneshot > result.json
+nm -list themes
+```
+
+Boolean flags such as **-chatsubo** do not take a value. Use
+**-chatsubo-every DURATION** to change the interval:
+```
+nm -chatsubo -chatsubo-every 30s
+```
 
 # PATHS
 

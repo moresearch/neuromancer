@@ -17,8 +17,6 @@ Modes
     -vil-info           Print the parsed Vial matrix and layers, then exit.
     -layer-track        Follow physical layer keys via Vial raw HID on Linux
                         (default: on). Use -layer-track=false to disable.
-    -arcade             Galaxy arcade: word-ships fire letters at you. Type
-                        the falling letters to shoot them down.
     -books DIR          Practice random paragraphs from text files in DIR.
     -gen PROMPT         Ask a local Ollama model for a drill (works with the
                         built-in layout; add -vil for layout-aware drills).
@@ -70,3 +68,17 @@ Misc
 
 Version
     -v                  Print the current version.
+
+Examples
+    nm
+    nm -t 60
+    nm -quotes en
+    nm -n 25 -g 4
+    nm -vil ~/sofle.vil
+    nm -vil ~/sofle.vil -layernames base,mouse,num,fn,shift,ctrl
+    nm -vil ~/sofle.vil -vil-info
+    nm -vil ~/sofle.vil -books ./books
+    nm -vil ~/sofle.vil lesson.txt
+    nm -vil ~/sofle.vil -chatsubo -chatsubo-every 1m -model qwen3.5:0.8b
+    nm -model qwen3:0.6b -gen "home row words"
+    nm -oneshot -noreport -t 60

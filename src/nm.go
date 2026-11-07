@@ -208,8 +208,6 @@ Modes
     -layer-track        Follow physical layer keys through the Vial raw HID
                         interface on Linux (default: on). Use
                         -layer-track=false to disable.
-    -arcade             Galaxy arcade: word-ships fire letters at you. Type
-                        the falling letters to shoot them down.
     -books DIR          Practice random paragraphs from .txt/.md/.text/.org
                         files in DIR.
 
@@ -282,12 +280,15 @@ Version
 
 Examples
     nm
-    nm -arcade
-    nm -arcade -t 180
+    nm -t 60
+    nm -quotes en
+    nm -n 25 -g 4
     nm -vil ~/sofle.vil
-    nm -gen "home row words"
-    nm -gen "sym layer with HRM shift" -vil ~/sofle.vil
-    nm -chatsubo -model qwen3:0.6b
+    nm -vil ~/sofle.vil -layernames base,mouse,num,fn,shift,ctrl
+    nm -vil ~/sofle.vil -books ./books
+    nm -vil ~/sofle.vil lesson.txt
+    nm -vil ~/sofle.vil -chatsubo -chatsubo-every 1m -model qwen3.5:0.8b
+    nm -model qwen3:0.6b -gen "home row words"
 `
 
 func saveMistakes(mistakes []mistake) {
@@ -335,7 +336,6 @@ func main() {
 	var showWpm bool
 	var drillMode bool
 	var hrmMode bool
-	var arcadeMode bool
 	var layerTrackEnabled bool
 	var chatsuboMode bool
 	var chatsuboEvery time.Duration
@@ -368,7 +368,6 @@ func main() {
 
 	flag.BoolVar(&showWpm, "showwpm", false, "")
 	flag.BoolVar(&layerTrackEnabled, "layer-track", true, "")
-	flag.BoolVar(&arcadeMode, "arcade", false, "")
 	flag.BoolVar(&drillMode, "drill", false, "")
 	flag.BoolVar(&hrmMode, "hrm", false, "")
 	flag.BoolVar(&chatsuboMode, "chatsubo", false, "")
@@ -466,9 +465,6 @@ func main() {
 	}
 
 	var modes []string
-	if arcadeMode {
-		modes = append(modes, "-arcade")
-	}
 	if genPrompt != "" {
 		modes = append(modes, "-gen")
 	}
@@ -492,9 +488,6 @@ func main() {
 	}
 	if len(modes) > 1 {
 		usageError("input modes cannot be combined: %s", strings.Join(modes, ", "))
-	}
-	if arcadeMode && chatsuboMode {
-		usageError("-arcade cannot be combined with -chatsubo")
 	}
 	if startParagraph >= 0 && len(flag.Args()) == 0 {
 		usageError("-start requires a file argument")
@@ -547,8 +540,6 @@ func main() {
 	}
 
 	switch {
-	case arcadeMode:
-		// Arcade mode is started after the tcell screen is initialized.
 	case genPrompt != "":
 		fmt.Fprintln(os.Stderr, "Generating lesson with Ollama...")
 		lesson, err := requestOllamaLesson(ollamaURL, ollamaModel, genPrompt, vilKB)
@@ -610,10 +601,6 @@ func main() {
 			panic(r)
 		}
 	}()
-
-	if arcadeMode {
-		exit(runArcade(scr, timeout, oneShotMode))
-	}
 
 	var typer *typer
 	if noTheme {

@@ -1,7 +1,4 @@
 # Unreleased:
- - Added `-arcade` galaxy shooter mode. Word-ships fire their letters at you;
-   type a falling letter to shoot it down and clear a ship's whole word for a
-   bonus.
  - Moved the Chatsubo box between the practice text and the keyboard, and
    reserve enough rows that text, attribution, and timers do not overlap it.
    The box now shows the layer/shift guidance line first, then the model

@@ -3,7 +3,7 @@
 `nm` is a terminal typing trainer for Colemak-DH and Vial keyboards. It shows
 the keyboard matrix while you type, highlights the key for the next character,
 teaches layer and HRM sequences, and can pull practice text from word lists,
-quotes, books, generated drills, or a galaxy arcade game.
+quotes, books, generated drills, or live coaching.
 
 ![](demo.gif)
 
@@ -19,7 +19,6 @@ quotes, books, generated drills, or a galaxy arcade game.
 - Optional Ollama integration:
   - `-gen` generates a practice drill from a prompt.
   - `-chatsubo` gives live, layout-aware typing tips in a fixed-size panel.
-- Galaxy arcade mode (`-arcade`) where word-ships fire letters at you.
 - Themes, JSON/CSV output, timed tests, and shell-friendly input.
 
 ## Install
@@ -86,6 +85,58 @@ nm -chatsubo            # correct
 nm -chatsubo 1          # wrong; use -chatsubo-every 1m for an interval
 ```
 
+## Common recipes
+
+### Practice text
+
+```bash
+nm                                  # 50 common English words
+nm -n 25 -g 4                       # 100 words, 4 groups
+nm -words 200en -n 40               # another built-in word list
+nm -quotes en                       # built-in English quotes
+nm lesson.txt                       # custom text file
+nm -start 0 lesson.txt              # reset saved progress for a file
+nm -raw lesson.txt                  # preserve input line breaks
+nm -multi lesson.txt                # each paragraph as its own test
+shuf -n 40 /usr/share/dict/words | nm
+```
+
+### Vial layout
+
+```bash
+VIL=~/keyboards/sofle.vil
+
+nm -vil "$VIL" -vil-info
+nm -vil "$VIL" -layernames base,mouse,num,fn,shift,ctrl
+nm -vil "$VIL" -drill
+nm -vil "$VIL" -hrm
+nm -vil "$VIL" lesson.txt
+nm -vil "$VIL" -layer-track=false
+```
+
+### Books and coaching
+
+```bash
+VIL=~/keyboards/sofle.vil
+
+nm -vil "$VIL" -books ./books
+nm -vil "$VIL" -books ./books \
+  -chatsubo -chatsubo-every 1m -model qwen3.5:0.8b
+
+nm -model qwen3:0.6b -gen "home row words"
+nm -vil "$VIL" -model qwen3:0.6b -gen "sym layer, avoid numbers"
+```
+
+### Timed and scripted runs
+
+```bash
+nm -t 60                            # 60-second test
+nm -oneshot -noreport -t 60         # exit after one timed test
+nm -csv -oneshot >> ~/wpm.csv       # append results to a CSV log
+nm -json -oneshot > result.json     # write JSON results
+nm -list themes                     # list built-in themes
+```
+
 ## Keyboard controls
 
 | Key | Action |
@@ -97,9 +148,6 @@ nm -chatsubo 1          # wrong; use -chatsubo-every 1m for an interval
 | `F3` | Return to automatic layer selection |
 | `Ctrl-W`, `Ctrl-Backspace`, `Alt-Backspace` | Delete the current word |
 | `Backspace` | Delete one character |
-
-In arcade mode: type falling letters, `R`/`Enter` restarts after game over,
-and `Esc` quits.
 
 ## Practice modes
 
@@ -300,22 +348,6 @@ Options:
 - `-chatsubo` — enable the live panel
 - `-chatsubo-every DURATION` — interval between comments (default `2m`)
 - `-ollama URL` / `-model NAME` — local Ollama settings
-
-## Galaxy arcade
-
-```bash
-nm -arcade
-nm -arcade -t 180
-nm -arcade -oneshot
-```
-
-Word-ships drift across the top and fire their letters at you. Type a falling
-letter to shoot it down; clear an entire word to destroy its ship for a bonus.
-Hits build a combo, three hulls, and waves accelerate the game. `R`/`Enter`
-restarts after game over and `Esc` quits.
-
-Arcade mode is standalone: it cannot be combined with `-books`, `-gen`,
-`-words`, `-quotes`, `-drill`, `-hrm`, a file argument, or `-chatsubo`.
 
 ## Aesthetics and output
 
