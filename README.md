@@ -18,7 +18,8 @@ quotes, books, generated drills, or live coaching.
 - HRM drills (`-hrm`) and non-base-layer drills (`-drill`).
 - Optional Ollama integration:
   - `-gen` generates a practice drill from a prompt.
-  - `-chatsubo` gives live, layout-aware typing tips in a fixed-size panel.
+  - `-chatsubo` gives live, layout-aware typing tips in a narrow panel between
+    the keyboard halves.
 - Themes, JSON/CSV output, timed tests, and shell-friendly input.
 
 ## Install
@@ -342,9 +343,15 @@ The model gives concrete layer tips such as:
 Num/sym layer: hold LT2 with your left thumb and press w for @.
 ```
 
-The panel is a fixed 96×8 preferred size (compact 4-row fallback on short
-terminals), with padded text, one guidance line, and up to three wrapped lines
-of commentary. Guidance and model text are clipped to the panel body.
+The panel sits in the widened gap between the keyboard halves (40 columns wide,
+about three key rows high plus a few rows, with two columns of side padding). It
+shows one guidance line and wrapped commentary, all clipped to the panel body.
+Every request includes the target finger in plain terms (left/right pinky,
+ring, middle, index, thumb), and Chatsubo is instructed to name the finger and
+give ergonomic Miryoku/Colemak-DH advice using home-row, home-column, reach,
+layer, and thumb-key language, without numeric finger codes. On terminals
+narrower than 100 columns the panel is omitted and the keyboard keeps its normal
+split gap.
 
 Options:
 
@@ -372,7 +379,7 @@ nm -highlight2
 - `-notheme` uses terminal colors.
 - `-showwpm` displays live WPM.
 - `-bold` emboldens typed text.
-- `-w N` wraps practice text to N columns (default 60; `-raw` ignores it).
+- `-w N` wraps practice text to N columns (default: fit the full keyboard width; `-raw` ignores it).
 - `-noskip` disables automatic word skipping on Space.
 - `-nobackspace` disables Backspace.
 - `-nohighlight` disables word highlighting; `-highlight1` and

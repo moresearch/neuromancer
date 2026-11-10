@@ -111,11 +111,11 @@ func TestVilRendering(t *testing.T) {
 	typ.vil = kb
 	typ.drawKeyboard('!')
 
-	m, ok := kb.metrics(80, 24)
+	m, ok := kb.metrics(80, 24, kbSplitGap)
 	if !ok {
 		t.Fatal("keyboard does not fit")
 	}
-	width := kb.width(m.keyWidth, m.keyGap)
+	width := kb.width(m.keyWidth, m.keyGap, m.splitGap)
 	x0 := (80 - width) / 2
 	keyY := func(row int) int {
 		return m.top + row*(m.keyH+m.rowGap)
@@ -136,9 +136,9 @@ func TestVilRendering(t *testing.T) {
 			t.Errorf("%s: fg=%v want %v", label, got, want)
 		}
 	}
-	checkFg("target ! border", x0+m.keyWidth/2, keyY(0), tcell.ColorGreen)
+	checkFg("target ! border", x0+m.keyWidth/2, keyY(0), tcell.ColorLightGreen)
 	checkFg("home a border", x0+m.keyWidth/2, keyY(1), fgOf(typ.defaultStyle))
-	checkFg("home a label", x0+m.keyWidth/2, keyY(1)+1, tcell.ColorGreen)
+	checkFg("home a label", x0+(m.keyWidth-1)/2, keyY(1)+1, tcell.ColorGreen)
 	_, _, targetStyleCell, _ := sim.GetContent(x0+m.keyWidth/2, keyY(0)+1)
 	if got := bgOf(targetStyleCell); got != bgOf(typ.defaultStyle) {
 		t.Errorf("target interior bg=%v, want %v", got, bgOf(typ.defaultStyle))
@@ -146,8 +146,8 @@ func TestVilRendering(t *testing.T) {
 	checkBg("activator MO1", x0+1*(m.keyWidth+m.keyGap)+m.keyWidth/2, keyY(1), bgOf(kbModStyle))
 
 	// The target is on the left half, so the right half is dimmed.
-	rightKeyX := x0 + kb.halfWidth(m.keyWidth, m.keyGap) + vilSplitGap + m.keyWidth/2
-	_, _, leftStyle, _ := sim.GetContent(x0+1*(m.keyWidth+m.keyGap)+m.keyWidth/2, keyY(0))
+	rightKeyX := x0 + kb.halfWidth(m.keyWidth, m.keyGap) + m.splitGap + m.keyWidth/2
+	_, _, leftStyle, _ := sim.GetContent(x0+m.keyWidth/2, keyY(0))
 	_, _, rightStyle, _ := sim.GetContent(rightKeyX, keyY(0))
 	_, _, leftAttrs := leftStyle.Decompose()
 	_, _, rightAttrs := rightStyle.Decompose()
@@ -265,7 +265,7 @@ func TestVilAutoColumnSplit(t *testing.T) {
 	if rows := kb.displayRows(); rows != 5 {
 		t.Fatalf("display rows = %d", rows)
 	}
-	if m, ok := kb.metrics(80, 24); !ok || m.keyWidth < 3 || m.keyGap < 0 {
+	if m, ok := kb.metrics(80, 24, kbSplitGap); !ok || m.keyWidth < 3 || m.keyGap < 0 {
 		t.Fatalf("metrics = %+v %v", m, ok)
 	}
 }

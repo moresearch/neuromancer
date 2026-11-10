@@ -21,6 +21,10 @@ const (
 	TyperResize
 )
 
+// layoutSplitPad is the blank rows kept between the practice text and the
+// keyboard/chatsubo block.
+const layoutSplitPad = 3
+
 type segment struct {
 	Text        string `json:"text"`
 	Attribution string `json:"attribution"`
@@ -56,8 +60,7 @@ type typer struct {
 	previewLayer int
 	blinkOn      bool
 	chatsubo     *chatsubo
-	chatTop      int
-	chatPlaced   bool
+	layoutTop    int
 	hintText     string
 	layerTracker *layerTracker
 }
@@ -85,6 +88,7 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 		tty:          tty,
 		previewLayer: -1,
 		blinkOn:      true,
+		layoutTop:    -1,
 
 		defaultStyle:        def,
 		correctStyle:        correctStyle,
@@ -182,43 +186,58 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	}
 
 	sw, sh := scr.Size()
-	nc, nr := calcStringDimensions(s)
+	textW, nr := calcStringDimensions(s)
+
+	t.layoutTop = -1
+	m, kbOK := t.keyboardMetrics()
+
+	// The text area spans the full keyboard width, so its left and right
+	// edges line up with the outer keycaps of both splits.
+	nc := textW
+	if kbOK {
+		if w := t.keyboardWidth(m); w > 0 {
+			nc = w
+		}
+	}
+	if nc > sw {
+		nc = sw
+	}
+	if nc < 1 {
+		nc = 1
+	}
 	x := (sw - nc) / 2
 
 	if t.chatsubo != nil {
 		t.chatsubo.resetSegment()
 	}
 
-	availH := sh
-	kbTop := 0
-	kbVisible := false
-	if _, top, ok := t.keyboardVisible(); ok {
-		availH = top - 1
-		kbTop = top
-		kbVisible = true
-	}
-	chatsuboAbove := t.chatsubo != nil && kbVisible && kbTop >= chatsuboMinAbove
-	if chatsuboAbove {
-		// Reserve the Chatsubo box between the text and the keyboard. Leave
-		// one more row when the timer is shown below the text.
-		availH = kbTop - chatsuboBoxHeight - 1
+	// Center the whole block (text, attribution/timer, gap, keyboard) both
+	// horizontally and vertically. The keyboard itself is centered by the
+	// metrics code; here we position the text and the vertical offset.
+	y := (sh - nr) / 2
+	if kbOK {
+		extra := 0
+		if attribution != "" {
+			_, ah := calcStringDimensions(attribution)
+			extra += ah
+		}
 		if timeLimit != -1 {
-			availH--
+			extra++
 		}
-		if availH < 1 {
-			availH = 1
+		contentH := nr + extra + layoutSplitPad + m.height
+		if contentH <= sh {
+			y = (sh - contentH) / 2
+			t.layoutTop = y + nr + extra + layoutSplitPad
+		} else {
+			y = 0
+			t.layoutTop = sh - m.height
+			if t.layoutTop < nr+extra+layoutSplitPad {
+				t.layoutTop = nr + extra + layoutSplitPad
+			}
 		}
 	}
-	y := (availH - nr) / 2
 	if y < 0 {
 		y = 0
-	}
-	if t.chatsubo != nil {
-		t.chatPlaced = true
-		t.chatTop = -1
-		if chatsuboAbove {
-			t.chatTop = t.chatsuboPlacement(y, nr, attribution, timeLimit)
-		}
 	}
 
 	t.wrongKey = 0

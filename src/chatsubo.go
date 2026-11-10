@@ -9,21 +9,21 @@ import (
 	"github.com/gdamore/tcell"
 )
 
-// The box has a fixed preferred size. On short terminals it falls back to a
-// compact four-row version in the keyboard's bottom padding.
+// The box is a panel in the gap between the keyboard halves.
 const (
-	chatsuboBoxWidth      = 96
-	chatsuboBoxHeight     = 8
-	chatsuboCompactHeight = 4
-	chatsuboMinAbove      = chatsuboBoxHeight + 4
+	chatsuboBoxWidth       = 40
+	chatsuboMinScreenWidth = 100
+	chatsuboCompactHeight  = 4
+	chatsuboFullHeight     = 8
+	chatsuboMaxKeyRows     = 3
+	chatsuboExtraRows      = 3
 
 	// Two columns of horizontal padding inside each border, and one blank
 	// padding row above and below the full-size body.
 	chatsuboBodyCols = chatsuboBoxWidth - 6
-	chatsuboBodyRows = chatsuboBoxHeight - 4
 
-	// Guidance uses one body row; the LLM can fill the rest.
-	chatsuboReplyRunes = (chatsuboBodyRows - 1) * chatsuboBodyCols
+	// Guidance uses one body row; the LLM can fill the rest of the panel.
+	chatsuboReplyRunes = 7 * chatsuboBodyCols
 )
 
 type chatsuboSnapshot struct {
@@ -35,6 +35,7 @@ type chatsuboSnapshot struct {
 	Recent   string
 	Hint     string
 	Target   string
+	Finger   string
 }
 
 type chatsubo struct {
@@ -77,7 +78,7 @@ func newChatsubo(url, model string, interval time.Duration, layout ...string) *c
 // .vil, including every layer matrix and the key which activates each layer.
 func chatsuboLayoutSummary(kb *vilKeyboard) string {
 	if kb == nil {
-		return "built-in Colemak-DH matrix (no .vil loaded)"
+		return "built-in Colemak-DH matrix (no .vil loaded)\n" + fingerLegend
 	}
 
 	var b strings.Builder
@@ -93,6 +94,7 @@ func chatsuboLayoutSummary(kb *vilKeyboard) string {
 	}
 	b.WriteString("labels: C/A/G/S prefixes are Ctrl/Alt/Gui/Shift home-row mods; " +
 		"MO/LT/TG/TO/DF/TT are layer keys; ___ is transparent; . is unused.\n")
+	b.WriteString(fingerLegend + "\n")
 	return b.String()
 }
 
@@ -129,9 +131,15 @@ func (c *chatsubo) ask(snap chatsuboSnapshot) (string, error) {
 	system := fmt.Sprintf(`You are Chatsubo, a laconic Gibson-style AI typing coach.
 The typist's Vial layout is supplied in every request. Study it and teach one
 concrete thing they can do on a specific layer: name the layer, how to
-activate it, and the key to press. Then add one short remark about the last
-interval if useful. Never invent keys, layers, or shortcuts not present in the
-layout. Keep the whole reply to one to three short sentences, max %d characters.
+activate it, and the key to press. Always name the finger for the target in
+plain terms: left or right pinky, ring, middle, index, or thumb. Do not use
+numeric finger codes. Give ergonomic Miryoku/Colemak-DH advice in that
+vocabulary: the home row, the finger's home column, inner or outer column
+reaches, home-row mods, thumb keys, and layers. Keep the hand relaxed and
+prefer a layer or thumb key over stretching. Then add one short remark about
+the last interval if useful. Never invent keys, layers, or shortcuts not
+present in the layout. Keep the whole reply to one to three short sentences,
+max %d characters.
 Be noir/cyberpunk, specific, and not cruel.
 No markdown, no emoji, no quotation marks.`, chatsuboReplyRunes)
 
@@ -144,8 +152,8 @@ No markdown, no emoji, no quotation marks.`, chatsuboReplyRunes)
 	}
 
 	user := fmt.Sprintf(
-		"layout_summary:\n%s\n\ncurrent_guidance: %s\ncurrent_target: %q\n\ninterval_seconds=%d\nwpm=%d\naccuracy=%.1f\nerrors=%d\nchars=%d\nrecent_typed=%q\n\nprevious_tips:\n%s\n\nDo not repeat a previous tip.",
-		layout, snap.Hint, snap.Target,
+		"layout_summary:\n%s\n\ncurrent_guidance: %s\ncurrent_target: %q\ntarget_finger: %s\n\ninterval_seconds=%d\nwpm=%d\naccuracy=%.1f\nerrors=%d\nchars=%d\nrecent_typed=%q\n\nprevious_tips:\n%s\n\nDo not repeat a previous tip.",
+		layout, snap.Hint, snap.Target, snap.Finger,
 		snap.Seconds, snap.WPM, snap.Accuracy, snap.Errors, snap.Chars, snap.Recent,
 		tips,
 	)
@@ -265,7 +273,7 @@ func (t *typer) maybeChatsubo(text, typed []rune, idx int) {
 	hint := t.hintFor(target)
 	if t.layerTracker != nil && t.vil != nil {
 		if layer := t.layerTracker.Layer(); layer >= 0 && layer < len(t.vil.layers) {
-			hint = t.vil.hintForLayer("held", layer, target)
+			hint = t.withFinger(t.vil.hintForLayer("held", layer, target), target)
 		}
 	}
 	snap := chatsuboSnapshot{
@@ -277,47 +285,37 @@ func (t *typer) maybeChatsubo(text, typed []rune, idx int) {
 		Recent:   recentTyped(typed[:idx], 32),
 		Hint:     hint,
 		Target:   targetText,
+		Finger:   fingerLabel(t.fingerForTarget(target)),
 	}
 
 	go c.request(snap, t.Scr)
 }
 
-// chatsuboPlacement centers the Chatsubo box in the gap between the text
-// block and the keyboard. It returns -1 when there is not enough room to draw
-// the box without overlapping the text.
-func (t *typer) chatsuboPlacement(textY, textLines int, attribution string, timeLimit time.Duration) int {
-	_, sh := t.Scr.Size()
-	_, attribLines := calcStringDimensions(attribution)
-
-	blockBottom := textY + textLines - 1
-	if attribution != "" {
-		blockBottom = textY + textLines + attribLines
-	}
-	if timeLimit != -1 {
-		if row := textY + textLines + attribLines + 1; row > blockBottom {
-			blockBottom = row
+// chatPanelGap returns the left edge of the gap between the keyboard halves
+// and whether the current layout is split.
+func (t *typer) chatPanelGap(m kbMetrics) (int, bool) {
+	sw, _ := t.Scr.Size()
+	if t.vil != nil {
+		kb := t.vil
+		width := kb.width(m.keyWidth, m.keyGap, m.splitGap)
+		x0 := (sw - width) / 2
+		switch {
+		case kb.splitCols:
+			left := kb.halfCols*m.keyWidth + (kb.halfCols-1)*m.keyGap
+			return x0 + left, true
+		case kb.halfRows > 0:
+			left := kb.halfWidth(m.keyWidth, m.keyGap)
+			return x0 + left, true
 		}
+		return 0, false
 	}
 
-	top := sh
-	if _, kt, ok := t.keyboardVisible(); ok {
-		top = kt
+	if kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)+2 > sw {
+		return 0, false
 	}
-
-	gapTop := blockBottom + 1
-	maxTop := top - chatsuboBoxHeight
-	if maxTop < gapTop || maxTop < 1 {
-		return -1
-	}
-
-	y := gapTop + (maxTop-gapTop)/2
-	if y < 1 {
-		y = 1
-	}
-	if y > maxTop {
-		y = maxTop
-	}
-	return y
+	width := kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
+	x0 := (sw - width) / 2
+	return x0 + kbSplitLeftWidth(m.keyWidth, m.keyGap), true
 }
 
 func (t *typer) drawChatsubo() {
@@ -326,41 +324,49 @@ func (t *typer) drawChatsubo() {
 	}
 
 	sw, sh := t.Scr.Size()
+	m, ok := t.keyboardMetrics()
+	if !ok {
+		return
+	}
+	gapX, split := t.chatPanelGap(m)
+	if !split {
+		return
+	}
+
 	width := chatsuboBoxWidth
+	if width > m.splitGap-2 {
+		width = m.splitGap - 2
+	}
 	if width > sw-8 {
 		width = sw - 8
 	}
-	if width < 30 || sh < chatsuboCompactHeight+1 {
+	if width < 12 {
 		return
 	}
 
-	height := chatsuboBoxHeight
-	y := sh - height
-	if t.chatPlaced {
-		if t.chatTop < 0 {
-			// Not enough room above the keyboard; use the compact version in
-			// the keyboard's bottom padding so the box stays visible.
-			height = chatsuboCompactHeight
-			y = sh - height
-		} else {
-			y = t.chatTop
-		}
-	} else if _, top, ok := t.keyboardVisible(); ok && top >= chatsuboMinAbove {
-		// Drawing without a started segment (for example in tests): use the
-		// preferred size directly above the keyboard when it fits.
-		y = top - height
-	} else {
+	height := chatsuboMaxKeyRows*m.keyH + (chatsuboMaxKeyRows-1)*m.rowGap + chatsuboExtraRows
+	if height < chatsuboCompactHeight {
 		height = chatsuboCompactHeight
-		y = sh - height
 	}
-	if y < 1 || y+height > sh {
+	if height > m.height {
+		height = m.height
+	}
+	if height > sh-m.top {
+		height = sh - m.top
+	}
+	if height < chatsuboCompactHeight+1 {
 		return
 	}
 
-	x := (sw - width) / 2
+	y := m.top + (m.height-height)/2
+	x := gapX + (m.splitGap-width)/2
+	if x < 1 || x+width > sw-1 {
+		return
+	}
+
 	contentRows := height - 2
 	topPad, bottomPad := 0, 0
-	if height >= chatsuboBoxHeight {
+	if height >= chatsuboFullHeight {
 		contentRows = height - 4
 		topPad, bottomPad = 1, 1
 	}

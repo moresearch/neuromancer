@@ -130,7 +130,7 @@ usage: nm \[OPTION\]... \[FILE\]
 
 -w *N*
 
-: The maximum line length in characters (default: 60). This option is ignored if -raw is present.
+: The maximum line length in characters (default: fit the full keyboard width). This option is ignored if -raw is present.
 
 ## Test Parameters
 
@@ -303,15 +303,18 @@ are determined exclusively by the input.
   short typed excerpt, the current key guidance, and the loaded `.vil` to
   Ollama. The model studies every layer, layer activator, and HRM, then gives a
   concrete tip about doing something on a named layer. It keeps the last three
-  tips in the prompt to avoid repeats. Text is wrapped to leave room for the
-  box, so the two do not overlap. The full box has a fixed eight-row, 96-column
-  size (shrinking only on narrower terminals), with two columns of horizontal
-  padding and one blank padding row above and below the body. It shows the
-  current layer/shift guidance line first (for example
-  `hold o (shift) + press p`), followed by up to three wrapped lines of model
-  commentary. Guidance and commentary are clipped to the body capacity, so they
-  cannot spill outside the box. On short terminals a compact four-row version
-  is used in the keyboard's bottom padding.
+  tips in the prompt to avoid repeats. The panel sits in the widened gap
+  between the keyboard halves: 40 columns wide and about three key rows high
+  plus a few rows, with two columns of horizontal padding and one blank padding
+  row above and below the body. It shows the current layer/shift guidance line
+  first (for example `hold o (shift) + press p`), followed by wrapped model
+  commentary. Each request also includes the target finger in plain terms
+  (left/right pinky, ring, middle, index, thumb), and Chatsubo is instructed to
+  name it and give ergonomic Miryoku/Colemak-DH advice using home-row,
+  home-column, reach, layer, and thumb-key language. Guidance and commentary are
+  clipped to the body capacity, so they cannot spill outside the box. On
+  terminals narrower than 100 columns the panel is omitted and the keyboard
+  keeps its normal split gap.
   **-chatsubo-every** controls the period (default `2m`; use `30s` for a quick
   test).
 

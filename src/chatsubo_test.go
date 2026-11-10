@@ -28,7 +28,7 @@ func TestDrawChatsubo(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer sim.Fini()
-	sim.SetSize(80, 40)
+	sim.SetSize(120, 40)
 
 	typ := newTestTyper(sim)
 	typ.chatsubo = newChatsubo("", "", time.Minute)
@@ -55,5 +55,38 @@ func TestDrawChatsubo(t *testing.T) {
 	}
 	if !strings.Contains(text.String(), "The sprawl watches") {
 		t.Error("chatsubo comment missing")
+	}
+
+	m, ok := typ.keyboardMetrics()
+	if !ok {
+		t.Fatal("keyboard does not fit")
+	}
+	gapX, split := typ.chatPanelGap(m)
+	if !split || m.splitGap < chatsuboBoxWidth+2 {
+		t.Fatalf("chatsubo gap: split=%v gap=%d", split, m.splitGap)
+	}
+	maxHeight := chatsuboMaxKeyRows*m.keyH + (chatsuboMaxKeyRows-1)*m.rowGap + chatsuboExtraRows
+	height := maxHeight
+	if height < chatsuboCompactHeight {
+		height = chatsuboCompactHeight
+	}
+	if height > m.height {
+		height = m.height
+	}
+	if height > maxHeight {
+		t.Errorf("chatsubo height %d exceeds %d key rows", height, chatsuboMaxKeyRows)
+	}
+	x := gapX + (m.splitGap-chatsuboBoxWidth)/2
+	y := m.top + (m.height-height)/2
+	cell := cells[y*w+x]
+	if len(cell.Runes) == 0 || cell.Runes[0] != '╭' {
+		t.Errorf("chatsubo not in the split gap at %d,%d: %q", x, y, string(cell.Runes))
+	}
+}
+
+func TestChatsuboLayoutSummaryFingers(t *testing.T) {
+	got := chatsuboLayoutSummary(nil)
+	if !strings.Contains(got, "left index") || !strings.Contains(got, "o=right pinky") {
+		t.Errorf("layout summary missing finger map: %q", got)
 	}
 }

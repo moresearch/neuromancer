@@ -84,7 +84,6 @@ type vilKeyRef struct {
 }
 
 const (
-	vilSplitGap    = 4
 	vilBottomPad   = 3
 	vilMinTextRows = 4
 )
@@ -1338,36 +1337,48 @@ func (kb *vilKeyboard) halfWidth(keyWidth, keyGap int) int {
 	return kb.maxCols*keyWidth + (kb.maxCols-1)*keyGap
 }
 
-func (kb *vilKeyboard) width(keyWidth, keyGap int) int {
+func (kb *vilKeyboard) width(keyWidth, keyGap, splitGap int) int {
 	if kb.splitCols {
 		leftWidth := kb.halfCols*keyWidth + (kb.halfCols-1)*keyGap
 		rightCols := kb.maxCols - kb.halfCols
 		rightWidth := rightCols*keyWidth + (rightCols-1)*keyGap
-		return leftWidth + vilSplitGap + rightWidth
+		return leftWidth + splitGap + rightWidth
 	}
 
 	half := kb.halfWidth(keyWidth, keyGap)
 	if kb.halfRows > 0 {
-		return 2*half + vilSplitGap
+		return 2*half + splitGap
 	}
 	return half
 }
 
-func (kb *vilKeyboard) metrics(screenWidth, screenHeight int) (kbMetrics, bool) {
+func (kb *vilKeyboard) widestKey(screenWidth, keyGap, splitGap int) int {
+	for kw := 8; kw >= 1; kw-- {
+		if w := kb.width(kw, keyGap, splitGap); w > 0 && w+2 <= screenWidth {
+			return kw
+		}
+	}
+	return 0
+}
+
+func (kb *vilKeyboard) metrics(screenWidth, screenHeight, splitGap int) (kbMetrics, bool) {
 	rows := kb.displayRows()
 	if rows == 0 {
 		return kbMetrics{}, false
 	}
 
-	keyWidth, keyGap := 0, 0
-	for kw := 8; kw >= 1; kw-- {
-		if w := kb.width(kw, 0); w > 0 && w+2 <= screenWidth {
-			keyWidth = kw
-			break
-		}
-	}
+	// Size the caps against the tightest layout so the wider column gap can
+	// never shrink them; then spend spare width on that gap.
+	keyWidth := kb.widestKey(screenWidth, 0, splitGap)
 	if keyWidth == 0 {
 		return kbMetrics{}, false
+	}
+	keyGap := 0
+	for g := kbMaxKeyGap; g > 0; g-- {
+		if kb.width(keyWidth, g, splitGap)+2 <= screenWidth {
+			keyGap = g
+			break
+		}
 	}
 
 	keyH, rowGap := chooseKeyMetrics(rows, screenHeight, vilBottomPad, vilMinTextRows)
@@ -1381,6 +1392,7 @@ func (kb *vilKeyboard) metrics(screenWidth, screenHeight int) (kbMetrics, bool) 
 	return kbMetrics{
 		keyWidth: keyWidth,
 		keyGap:   keyGap,
+		splitGap: splitGap,
 		keyH:     keyH,
 		rowGap:   rowGap,
 		top:      top,
@@ -1660,8 +1672,8 @@ func (t *typer) drawVilKeyboard(target rune) {
 		return
 	}
 
-	sw, sh := t.Scr.Size()
-	m, ok := kb.metrics(sw, sh)
+	sw, _ := t.Scr.Size()
+	m, ok := t.keyboardMetrics()
 	if !ok {
 		return
 	}
@@ -1703,7 +1715,16 @@ func (t *typer) drawVilKeyboard(target rune) {
 		showTarget = found && hint.layer == layer
 	}
 
-	width := kb.width(m.keyWidth, m.keyGap)
+	// Light the column of the finger which should reach this key. Thumbs do
+	// not own a finger column, so thumb targets leave the matrix undimmed.
+	activeCol := -1
+	if found && !kb.isThumbRow(hint.row) {
+		if _, c, ok := kb.targetHome(hint.row, hint.col); ok {
+			activeCol = c
+		}
+	}
+
+	width := kb.width(m.keyWidth, m.keyGap, m.splitGap)
 	x0 := (sw - width) / 2
 	rows := kb.displayRows()
 
@@ -1730,19 +1751,19 @@ func (t *typer) drawVilKeyboard(target rune) {
 		switch {
 		case kb.splitCols:
 			leftWidth := kb.halfCols*m.keyWidth + (kb.halfCols-1)*m.keyGap
-			kb.drawCols(t.Scr, layer, r, 0, kb.halfCols, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, t.blinkOn, rawLayer, t.defaultStyle)
+			kb.drawCols(t.Scr, layer, r, 0, kb.halfCols, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 			kb.drawCols(t.Scr, layer, r, kb.halfCols, kb.maxCols,
-				x0+leftWidth+vilSplitGap, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, t.blinkOn, rawLayer, t.defaultStyle)
+				x0+leftWidth+m.splitGap, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 		case kb.halfRows > 0:
 			leftWidth := kb.halfWidth(m.keyWidth, m.keyGap)
-			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, t.blinkOn, rawLayer, t.defaultStyle)
+			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 			if r+kb.halfRows < len(kb.layers[0].matrix) {
 				kb.drawHalf(t.Scr, layer, r+kb.halfRows,
-					x0+leftWidth+vilSplitGap,
-					y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, t.blinkOn, rawLayer, t.defaultStyle)
+					x0+leftWidth+m.splitGap,
+					y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 			}
 		default:
-			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, true, t.blinkOn, rawLayer, t.defaultStyle)
+			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, true, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 		}
 	}
 
@@ -1758,13 +1779,13 @@ func (t *typer) drawVilKeyboard(target rune) {
 			hintText = noKeyHint(target)
 		}
 	}
-	t.hintText = hintText
+	t.hintText = t.withFinger(hintText, target)
 	if t.chatsubo == nil {
 		drawHintLine(t.Scr, hintY, x0, width, hintText, t.defaultStyle)
 	}
 }
 
-func (kb *vilKeyboard) drawHalf(scr tcell.Screen, layer, matrixRow, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused, blink bool, raw bool, def tcell.Style) {
+func (kb *vilKeyboard) drawHalf(scr tcell.Screen, layer, matrixRow, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused bool, activeCol int, blink bool, raw bool, def tcell.Style) {
 	if layer < 0 || layer >= len(kb.layers) {
 		return
 	}
@@ -1773,10 +1794,10 @@ func (kb *vilKeyboard) drawHalf(scr tcell.Screen, layer, matrixRow, x, y, keyWid
 	}
 
 	kb.drawCols(scr, layer, matrixRow, 0, len(kb.layers[layer].matrix[matrixRow]),
-		x, y, keyWidth, keyGap, keyH, hint, found, wrongRow, wrongCol, focused, blink, raw, def)
+		x, y, keyWidth, keyGap, keyH, hint, found, wrongRow, wrongCol, focused, activeCol, blink, raw, def)
 }
 
-func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, endCol, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused, blink bool, raw bool, def tcell.Style) {
+func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, endCol, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused bool, activeCol int, blink bool, raw bool, def tcell.Style) {
 	if layer < 0 || layer >= len(kb.layers) {
 		return
 	}
@@ -1826,8 +1847,8 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 			border = kbErrorStyle
 			highlighted = true
 		case found && matrixRow == hint.row && col == hint.col:
-			style = def
-			border = targetStyle(blink, def)
+			style = targetStyle(blink, def)
+			border = style
 			highlighted = true
 		case found && hint.activator != nil && matrixRow == hint.activator.row && col == hint.activator.col:
 			style = kbModStyle
@@ -1838,10 +1859,15 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 			border = kbModStyle
 			highlighted = true
 		case kb.isHomeKey(matrixRow, col):
-			style = def.Foreground(tcell.ColorGreen).Dim(true)
+			if col == activeCol {
+				style = def.Foreground(tcell.ColorGreen).Bold(true)
+			} else {
+				style = def.Foreground(tcell.ColorGreen).Dim(true)
+			}
 			border = def
 		}
-		if !highlighted && !focused {
+		inFingerCol := activeCol < 0 || col == activeCol
+		if !highlighted && !(focused && inFingerCol) {
 			style = style.Dim(true)
 			border = border.Dim(true)
 		}

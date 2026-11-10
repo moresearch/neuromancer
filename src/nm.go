@@ -238,8 +238,8 @@ File Mode
 Aesthetics
     -showwpm            Display WPM whilst typing.
     -theme THEMEFILE    The theme to use.
-    -w N                The maximum line length in characters (default: 60).
-                        Ignored if -raw is present.
+    -w N                The maximum line length in characters (default: fit
+                        the keyboard width). Ignored if -raw is present.
     -notheme            Attempt to use the default terminal theme.
                         This may produce odd results depending
                         on the theme colours.
@@ -353,7 +353,7 @@ func main() {
 	flag.IntVar(&g, "g", 1, "")
 	flag.IntVar(&startParagraph, "start", -1, "")
 
-	flag.IntVar(&maxLineLen, "w", 60, "")
+	flag.IntVar(&maxLineLen, "w", 0, "")
 	flag.IntVar(&timeout, "t", -1, "")
 
 	flag.BoolVar(&versionFlag, "v", false, "")
@@ -430,7 +430,7 @@ func main() {
 	if g <= 0 {
 		usageError("-g must be a positive number of groups (got %d)", g)
 	}
-	if maxLineLen < 20 {
+	if maxLineLen != 0 && maxLineLen < 20 {
 		usageError("-w must be at least 20 columns (got %d)", maxLineLen)
 	}
 	if timeout != -1 && timeout <= 0 {
@@ -640,34 +640,29 @@ func main() {
 
 	reflow := func(s string) string {
 		sw, sh := scr.Size()
+		typer.layoutTop = -1
 		top := sh
-		kbAbove := false
-		if _, kt, ok := typer.keyboardVisible(); ok {
-			top = kt
-			kbAbove = kt >= chatsuboMinAbove
-		}
-		// Leave room above the keyboard for the Chatsubo box and, when
-		// present, the attribution/timer line below the text.
-		maxLines := top - 2
-		if chatsuboMode && kbAbove {
-			maxLines = top - chatsuboBoxHeight - 2
-			if timeout != -1 {
-				maxLines--
-			}
-		}
-		if maxLines < 1 {
-			maxLines = 1
-		}
 		wsz := maxLineLen
-		if sw > 8 {
-			if wsz > sw-8 {
-				wsz = sw - 8
+		if m, ok := typer.keyboardMetrics(); ok {
+			top = m.top
+			if wsz == 0 {
+				wsz = typer.keyboardWidth(m)
 			}
-		} else {
-			wsz = 1
+		}
+		if wsz == 0 {
+			wsz = sw - 8
+		}
+		if maxLineLen != 0 && sw > 8 && wsz > sw-8 {
+			wsz = sw - 8
 		}
 		if wsz < 1 {
 			wsz = 1
+		}
+		// Leave room for the gap above the splits and the attribution/timer
+		// line below the text.
+		maxLines := top - 2 - layoutSplitPad
+		if maxLines < 1 {
+			maxLines = 1
 		}
 		return trimText(s, wsz, maxLines)
 	}

@@ -35,6 +35,7 @@ var kbShifted = map[rune]rune{
 const (
 	kbSpaceRow    = 4
 	kbKeyGap      = 1
+	kbMaxKeyGap   = 2
 	kbBottomPad   = 3
 	kbMinTextRows = 4
 )
@@ -42,6 +43,7 @@ const (
 type kbMetrics struct {
 	keyWidth int
 	keyGap   int
+	splitGap int
 	keyH     int
 	rowGap   int
 	top      int
@@ -50,7 +52,7 @@ type kbMetrics struct {
 
 var (
 	kbTargetStyle = tcell.StyleDefault.
-			Foreground(tcell.ColorGreen).
+			Foreground(tcell.ColorLightGreen).
 			Bold(true)
 	kbErrorStyle = tcell.StyleDefault.
 			Foreground(tcell.ColorWhite).
@@ -61,7 +63,7 @@ var (
 			Background(tcell.NewRGBColor(0x00, 0x89, 0x86)).
 			Bold(true)
 	kbTargetBlinkStyle = tcell.StyleDefault.
-				Foreground(tcell.ColorWhite).
+				Foreground(tcell.ColorDarkGreen).
 				Bold(true)
 )
 
@@ -81,9 +83,9 @@ func hrmTag(mod string) string {
 
 func targetStyle(blinkOn bool, def tcell.Style) tcell.Style {
 	if blinkOn {
-		return def.Foreground(tcell.ColorGreen).Bold(true)
+		return def.Foreground(tcell.ColorLightGreen).Bold(true)
 	}
-	return def.Foreground(tcell.ColorWhite).Bold(true)
+	return def.Foreground(tcell.ColorDarkGreen).Bold(true)
 }
 
 // kbFind returns the row and column of the key which produces r.
@@ -118,17 +120,19 @@ func chooseKeyMetrics(rows, screenHeight, bottomPad, minTextRows int) (keyH, row
 	return 1, 0
 }
 
-func kbBuiltinMetrics(screenWidth, screenHeight int) (kbMetrics, bool) {
+func kbBuiltinMetrics(screenWidth, screenHeight, splitGap int) (kbMetrics, bool) {
 	keyWidth := 0
+	split := false
 	for kw := 5; kw >= 1; kw-- {
-		if kbSplitWidth(kw)+2 <= screenWidth {
+		if kbSplitWidth(kw, kbKeyGap, splitGap)+2 <= screenWidth {
 			keyWidth = kw
+			split = true
 			break
 		}
 	}
 	if keyWidth == 0 {
 		for kw := 5; kw >= 1; kw-- {
-			if kbWidth(kw)+2 <= screenWidth {
+			if kbWidth(kw, kbKeyGap)+2 <= screenWidth {
 				keyWidth = kw
 				break
 			}
@@ -136,6 +140,20 @@ func kbBuiltinMetrics(screenWidth, screenHeight int) (kbMetrics, bool) {
 	}
 	if keyWidth == 0 {
 		return kbMetrics{}, false
+	}
+
+	// Keep the cap size chosen above and spend any spare width on wider
+	// columns. Narrow terminals keep the original spacing.
+	keyGap := kbKeyGap
+	for g := kbMaxKeyGap; g > kbKeyGap; g-- {
+		w := kbWidth(keyWidth, g)
+		if split {
+			w = kbSplitWidth(keyWidth, g, splitGap)
+		}
+		if w+2 <= screenWidth {
+			keyGap = g
+			break
+		}
 	}
 
 	rows := len(kbRows) + 1 // four key rows plus the space row
@@ -149,7 +167,8 @@ func kbBuiltinMetrics(screenWidth, screenHeight int) (kbMetrics, bool) {
 
 	return kbMetrics{
 		keyWidth: keyWidth,
-		keyGap:   kbKeyGap,
+		keyGap:   keyGap,
+		splitGap: splitGap,
 		keyH:     keyH,
 		rowGap:   rowGap,
 		top:      top,
@@ -164,10 +183,10 @@ func kbOffset(row, keyWidth int) int {
 	return kbRows[row].offset
 }
 
-func kbWidth(keyWidth int) int {
+func kbWidth(keyWidth, keyGap int) int {
 	width := 0
 	for i, row := range kbRows {
-		rowWidth := kbOffset(i, keyWidth) + len(row.keys)*keyWidth + (len(row.keys)-1)*kbKeyGap
+		rowWidth := kbOffset(i, keyWidth) + len(row.keys)*keyWidth + (len(row.keys)-1)*keyGap
 		if rowWidth > width {
 			width = rowWidth
 		}
@@ -178,13 +197,47 @@ func kbWidth(keyWidth int) int {
 
 // keyboardVisible reports whether the matrix fits on screen and where it starts.
 func (t *typer) keyboardVisible() (keyWidth, top int, ok bool) {
+	m, ok := t.keyboardMetrics()
+	return m.keyWidth, m.top, ok
+}
+
+// keyboardWidth is the total width of the drawn matrix, including both
+// halves and the split gap.
+func (t *typer) keyboardWidth(m kbMetrics) int {
 	if t.vil != nil {
-		m, ok := t.vil.metrics(t.Scr.Size())
-		return m.keyWidth, m.top, ok
+		return t.vil.width(m.keyWidth, m.keyGap, m.splitGap)
+	}
+	sw, _ := t.Scr.Size()
+	if kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)+2 <= sw {
+		return kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
+	}
+	return kbWidth(m.keyWidth, m.keyGap)
+}
+
+func (t *typer) keyboardMetrics() (kbMetrics, bool) {
+	sw, sh := t.Scr.Size()
+	splitGap := kbSplitGap
+	if sw >= kbWideScreen {
+		splitGap = kbWideSplitGap
+	}
+	if t.chatsubo != nil && sw >= chatsuboMinScreenWidth {
+		splitGap = chatsuboBoxWidth + 4
 	}
 
-	m, ok := kbBuiltinMetrics(t.Scr.Size())
-	return m.keyWidth, m.top, ok
+	var m kbMetrics
+	var ok bool
+	if t.vil != nil {
+		m, ok = t.vil.metrics(sw, sh, splitGap)
+	} else {
+		m, ok = kbBuiltinMetrics(sw, sh, splitGap)
+	}
+	if !ok {
+		return m, false
+	}
+	if t.layoutTop >= 2 && t.layoutTop+m.height <= sh {
+		m.top = t.layoutTop
+	}
+	return m, true
 }
 
 func buttonLabel(label string, max int) string {
@@ -303,9 +356,9 @@ func (t *typer) hintFor(target rune) string {
 		if !found {
 			return noKeyHint(target)
 		}
-		return t.vil.hintText(hint, found)
+		return t.withFinger(t.vil.hintText(hint, found), target)
 	}
-	return builtinHint(target)
+	return t.withFinger(builtinHint(target), target)
 }
 
 // builtinHint describes the key needed for target on the built-in Colemak-DH
@@ -339,8 +392,10 @@ func builtinHint(target rune) string {
 }
 
 const (
-	kbSplitCol = 5
-	kbSplitGap = 5
+	kbSplitCol     = 5
+	kbSplitGap     = 5
+	kbWideSplitGap = 9
+	kbWideScreen   = 100
 )
 
 func kbSplitMaxOffset(keyWidth int) int {
@@ -353,11 +408,11 @@ func kbSplitMaxOffset(keyWidth int) int {
 	return max
 }
 
-func kbSplitLeftWidth(keyWidth int) int {
-	return kbSplitMaxOffset(keyWidth) + kbSplitCol*keyWidth + (kbSplitCol-1)*kbKeyGap
+func kbSplitLeftWidth(keyWidth, keyGap int) int {
+	return kbSplitMaxOffset(keyWidth) + kbSplitCol*keyWidth + (kbSplitCol-1)*keyGap
 }
 
-func kbSplitRightWidth(keyWidth int) int {
+func kbSplitRightWidth(keyWidth, keyGap int) int {
 	max := 0
 	for _, row := range kbRows {
 		if n := len(row.keys) - kbSplitCol; n > max {
@@ -367,11 +422,11 @@ func kbSplitRightWidth(keyWidth int) int {
 	if max == 0 {
 		return 0
 	}
-	return max*keyWidth + (max-1)*kbKeyGap
+	return max*keyWidth + (max-1)*keyGap
 }
 
-func kbSplitWidth(keyWidth int) int {
-	return kbSplitLeftWidth(keyWidth) + kbSplitGap + kbSplitRightWidth(keyWidth)
+func kbSplitWidth(keyWidth, keyGap, splitGap int) int {
+	return kbSplitLeftWidth(keyWidth, keyGap) + splitGap + kbSplitRightWidth(keyWidth, keyGap)
 }
 
 func kbBuiltinHomeKey(row, col int) bool {
@@ -399,20 +454,20 @@ func kbBuiltinTargetHome(row, col int) (int, int, bool) {
 }
 
 func (t *typer) drawBuiltinKeyboard(target rune) {
-	t.hintText = builtinHint(target)
+	t.hintText = t.withFinger(builtinHint(target), target)
 
-	sw, sh := t.Scr.Size()
-	m, ok := kbBuiltinMetrics(sw, sh)
+	sw, _ := t.Scr.Size()
+	m, ok := t.keyboardMetrics()
 	if !ok {
 		return
 	}
 
-	split := kbSplitWidth(m.keyWidth)+2 <= sw
-	width := kbWidth(m.keyWidth)
+	split := kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)+2 <= sw
+	width := kbWidth(m.keyWidth, m.keyGap)
 	leftWidth := 0
 	if split {
-		width = kbSplitWidth(m.keyWidth)
-		leftWidth = kbSplitLeftWidth(m.keyWidth)
+		width = kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
+		leftWidth = kbSplitLeftWidth(m.keyWidth, m.keyGap)
 	}
 	x0 := (sw - width) / 2
 
@@ -443,6 +498,15 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 		}
 	}
 
+	// Light the column of the finger which should reach this key. The rest of
+	// the matrix dims so the active column stands out.
+	activeCol := -1
+	if targetRow >= 0 && targetRow != kbSpaceRow {
+		if _, c, ok := kbBuiltinTargetHome(targetRow, targetCol); ok {
+			activeCol = c
+		}
+	}
+
 	for i, row := range kbRows {
 		y := m.top + i*(m.keyH+m.rowGap)
 		offset := kbOffset(i, m.keyWidth)
@@ -454,7 +518,7 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 				if j < kbSplitCol {
 					focused = focusLeft
 				} else {
-					x = x0 + leftWidth + kbSplitGap + (j-kbSplitCol)*(m.keyWidth+m.keyGap)
+					x = x0 + leftWidth + m.splitGap + (j-kbSplitCol)*(m.keyWidth+m.keyGap)
 					focused = focusRight
 				}
 			}
@@ -468,14 +532,19 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 				border = kbErrorStyle
 				highlighted = true
 			case i == targetRow && j == targetCol:
-				style = t.defaultStyle
-				border = targetStyle(t.blinkOn, t.defaultStyle)
+				style = targetStyle(t.blinkOn, t.defaultStyle)
+				border = style
 				highlighted = true
 			case kbBuiltinHomeKey(i, j):
-				style = t.defaultStyle.Foreground(tcell.ColorGreen).Dim(true)
+				if j == activeCol {
+					style = t.defaultStyle.Foreground(tcell.ColorGreen).Bold(true)
+				} else {
+					style = t.defaultStyle.Foreground(tcell.ColorGreen).Dim(true)
+				}
 				border = t.defaultStyle
 			}
-			if !highlighted && !focused {
+			inFingerCol := activeCol < 0 || j == activeCol
+			if !highlighted && !(focused && inFingerCol) {
 				style = style.Dim(true)
 				border = border.Dim(true)
 			}
@@ -487,7 +556,7 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 	spaceY := m.top + len(kbRows)*(m.keyH+m.rowGap)
 
 	if split {
-		rightWidth := width - leftWidth - kbSplitGap
+		rightWidth := width - leftWidth - m.splitGap
 		leftSpace, rightSpace := 11, 11
 		if m.keyWidth == 1 {
 			leftSpace, rightSpace = 5, 5
@@ -514,12 +583,12 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 			leftStyle, rightStyle = kbErrorStyle, kbErrorStyle
 			leftBorder, rightBorder = kbErrorStyle, kbErrorStyle
 		} else if targetRow == kbSpaceRow {
-			leftStyle, leftBorder = t.defaultStyle, targetStyle(t.blinkOn, t.defaultStyle)
-			rightStyle, rightBorder = t.defaultStyle, targetStyle(t.blinkOn, t.defaultStyle)
+			leftStyle, leftBorder = targetStyle(t.blinkOn, t.defaultStyle), targetStyle(t.blinkOn, t.defaultStyle)
+			rightStyle, rightBorder = targetStyle(t.blinkOn, t.defaultStyle), targetStyle(t.blinkOn, t.defaultStyle)
 		}
 
 		leftX := x0 + (leftWidth-leftSpace)/2
-		rightX := x0 + leftWidth + kbSplitGap + (rightWidth-rightSpace)/2
+		rightX := x0 + leftWidth + m.splitGap + (rightWidth-rightSpace)/2
 		drawKBButton(t.Scr, leftX, spaceY, leftSpace, m.keyH, "space", "", leftStyle, leftBorder)
 		drawKBButton(t.Scr, rightX, spaceY, rightSpace, m.keyH, "space", "", rightStyle, rightBorder)
 	} else {
@@ -538,7 +607,7 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 			spaceStyle = kbErrorStyle
 			spaceBorder = kbErrorStyle
 		case targetRow == kbSpaceRow:
-			spaceStyle = t.defaultStyle
+			spaceStyle = targetStyle(t.blinkOn, t.defaultStyle)
 			spaceBorder = targetStyle(t.blinkOn, t.defaultStyle)
 		}
 		drawKBButton(t.Scr, spaceX, spaceY, spaceWidth, m.keyH, "space", "", spaceStyle, spaceBorder)

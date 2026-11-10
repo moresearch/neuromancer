@@ -1,4 +1,20 @@
 # Unreleased:
+ - Practice text now spans the full keyboard width by default (both splits plus
+   the gap) instead of stopping at 60 columns. The text area's edges line up
+   with the outer keycaps, and the text/gap/keyboard block is centered as a
+   whole vertically and horizontally with three rows of padding above the
+   splits.
+ - Widen the gap between the keyboard halves and move Chatsubo into it as a
+   40-column panel about three key rows high plus a few rows, instead of a wide
+   panel above the text. The panel no longer reserves rows above the keyboard,
+   so the practice text gets that space back. Chatsubo now receives the target
+   finger in plain terms (left/right pinky, ring, middle, index, thumb) and is
+   instructed to give ergonomic Miryoku/Colemak-DH advice using home-row,
+   home-column, reach, layer, and thumb-key language.
+ - Use spare terminal width to widen the gap between key columns without
+   shrinking the keycaps. The keyboard now dims every column except the home
+   column of the finger which should reach the next key, and the target key
+   blinks light green / dark green.
  - Documented the remaining flags in the plain-text usage summary and man page
    (`-drill`, `-hrm`, `-nobackspace`, and the highlighting toggles), and removed
    unused drawing and wrapping helpers.

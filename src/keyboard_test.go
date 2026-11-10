@@ -69,12 +69,12 @@ func TestDrawKeyboardHighlights(t *testing.T) {
 	scr.SetSize(80, 24)
 
 	kb := newTestTyper(scr)
-	m, ok := kbBuiltinMetrics(80, 24)
+	m, ok := kbBuiltinMetrics(80, 24, kbSplitGap)
 	if !ok || m.keyWidth != 4 {
 		t.Fatalf("keyboard not visible: %+v %v", m, ok)
 	}
-	width := kbSplitWidth(m.keyWidth)
-	leftWidth := kbSplitLeftWidth(m.keyWidth)
+	width := kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
+	leftWidth := kbSplitLeftWidth(m.keyWidth, m.keyGap)
 	x0 := (80 - width) / 2
 	keyX := func(row, col int) int {
 		if col < kbSplitCol {
@@ -100,16 +100,27 @@ func TestDrawKeyboardHighlights(t *testing.T) {
 			t.Errorf("%s: fg=%v want %v", label, got, want)
 		}
 	}
-	checkFg("target f border", 1, 2, tcell.ColorGreen)
+	checkFg("target f border", 1, 2, tcell.ColorLightGreen)
 	_, _, style, _ := scr.GetContent(keyX(1, 2)+m.keyWidth/2, keyY(1)+1)
 	if got := bgOf(style); got != bgOf(kb.defaultStyle) {
 		t.Errorf("target f interior bg=%v, want %v", got, bgOf(kb.defaultStyle))
 	}
 	checkBg("non-target q", 1, 0, bgOf(kb.defaultStyle))
 
+	_, _, colStyle, _ := scr.GetContent(keyX(2, 0)+m.keyWidth/2, keyY(2)+1)
+	_, _, colAttrs := colStyle.Decompose()
+	if colAttrs&tcell.AttrDim == 0 {
+		t.Error("inactive finger column is not dimmed")
+	}
+	_, _, activeStyle, _ := scr.GetContent(keyX(2, 2)+m.keyWidth/2, keyY(2)+1)
+	_, _, activeAttrs := activeStyle.Decompose()
+	if activeAttrs&tcell.AttrDim != 0 {
+		t.Error("active finger column is dimmed")
+	}
+
 	kb.blinkOn = false
 	kb.drawKeyboard('f')
-	checkFg("target f blink-off border", 1, 2, tcell.ColorWhite)
+	checkFg("target f blink-off border", 1, 2, tcell.ColorDarkGreen)
 	kb.blinkOn = true
 
 	_, _, style, _ = scr.GetContent(keyX(1, 6)+m.keyWidth/2, keyY(1))
@@ -121,12 +132,12 @@ func TestDrawKeyboardHighlights(t *testing.T) {
 	kb.wrongKey = 'j'
 	kb.wrongUntil = time.Now().Add(time.Second)
 	kb.drawKeyboard('f')
-	checkFg("target f border", 1, 2, tcell.ColorGreen)
+	checkFg("target f border", 1, 2, tcell.ColorLightGreen)
 	checkBg("wrong j", 1, 5, bgOf(kbErrorStyle))
 
 	kb.wrongUntil = time.Time{}
 	kb.drawKeyboard('j')
-	checkFg("target j border", 1, 5, tcell.ColorGreen)
+	checkFg("target j border", 1, 5, tcell.ColorLightGreen)
 	_, _, style, _ = scr.GetContent(keyX(1, 0)+m.keyWidth/2, keyY(1))
 	_, _, attrs = style.Decompose()
 	if attrs&tcell.AttrDim == 0 {
@@ -174,12 +185,12 @@ func TestBuiltinTargetFingerHome(t *testing.T) {
 	scr.SetSize(80, 24)
 
 	typ := newTestTyper(scr)
-	m, ok := kbBuiltinMetrics(80, 24)
+	m, ok := kbBuiltinMetrics(80, 24, kbSplitGap)
 	if !ok {
 		t.Fatal("keyboard does not fit")
 	}
-	width := kbSplitWidth(m.keyWidth)
-	leftWidth := kbSplitLeftWidth(m.keyWidth)
+	width := kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
+	leftWidth := kbSplitLeftWidth(m.keyWidth, m.keyGap)
 	x0 := (80 - width) / 2
 	keyX := func(row, col int) int {
 		if col < kbSplitCol {
@@ -200,11 +211,11 @@ func TestBuiltinTargetFingerHome(t *testing.T) {
 	if fg := fgOf(style); fg != tcell.ColorGreen {
 		t.Errorf("t label fg = %v, want green", fg)
 	}
-	if attrs&tcell.AttrDim == 0 {
-		t.Error("t label should stay dim green")
+	if attrs&tcell.AttrDim != 0 {
+		t.Error("active finger home label should not be dimmed")
 	}
 	_, _, style, _ = scr.GetContent(keyX(2, 4)+m.keyWidth/2, keyY(2))
-	if got := fgOf(style); got != tcell.ColorGreen {
-		t.Errorf("g target border fg = %v, want green", got)
+	if got := fgOf(style); got != tcell.ColorLightGreen {
+		t.Errorf("g target border fg = %v, want light green", got)
 	}
 }
