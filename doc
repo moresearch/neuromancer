@@ -1,69 +1,89 @@
 usage: nm [options] [file]
 
 Modes
-    -words  WORDFILE    Specifies the file from which words are randomly 
-                        generated (default: 1000en).
-    -quotes QUOTEFILE   Starts quote mode in which quotes are randomly generated 
+    -words  WORDFILE    Specifies the file from which words are randomly drawn
+                        (default: 1000en).
+    -quotes QUOTEFILE   Starts quote mode in which quotes are randomly drawn
                         from the given file. The file should be JSON encoded and
                         have the following form:
 
                         [{"text": "foo", attribution: "bar"}]
-    -vil FILE           Load a Vial (.vil) keymap and show the layout and the
-                        layer required for the next character.
+    -vil FILE           Load a Vial (.vil) keymap. The layout and the layer
+                        required for the next character are shown while typing.
     -layernames NAMES   Comma separated layer names for -vil, e.g.
                         base,nav,media,num,sym,fun.
     -vil-split MODE     Split the Vial matrix into halves: auto, rows, cols
                         or none (default: auto).
-    -vil-info           Print the parsed Vial matrix and layers, then exit.
-    -layer-track        Follow physical layer keys via Vial raw HID on Linux
-                        (default: on). Use -layer-track=false to disable.
-    -books DIR          Practice random paragraphs from text files in DIR.
-    -gen PROMPT         Ask a local Ollama model for a drill (works with the
-                        built-in layout; add -vil for layout-aware drills).
+    -vil-info           Print the parsed Vial layers and exit.
+    -layer-track        Follow physical layer keys through the Vial raw HID
+                        interface on Linux (default: on). Use
+                        -layer-track=false to disable.
+    -drill              With -vil, generate a drill from characters that
+                        require a non-base layer.
+    -hrm                With -vil, drill shifted characters using your
+                        home-row-mod shift keys.
+    -books DIR          Practice random paragraphs from .txt/.md/.text/.org
+                        files in DIR.
+
+Ollama (optional)
+    -gen PROMPT         Generate a drill with a local Ollama model. Works with
+                        the built-in Colemak-DH layout; add -vil FILE for
+                        layout-aware drills.
+    -chatsubo           Live typing commentary from a local Ollama model.
+    -model NAME         Model to use (default: auto, prefers qwen).
+                        Env: OLLAMA_MODEL
     -ollama URL         Ollama API URL (default: http://localhost:11434).
-    -model NAME         Ollama model (default: auto, prefers qwen).
-    -chatsubo           Live Chatsubo commentary from Ollama.
+                        Env: OLLAMA_HOST
     -chatsubo-every DURATION
                         Time between comments (default: 2m; e.g. 30s).
 
 Word Mode
     -n GROUPSZ          Sets the number of words which constitute a group.
     -g NGROUPS          Sets the number of groups which constitute a test.
-    -drill              With -vil, generate a drill from characters that
-                        require a non-base layer.
-    -hrm                With -vil, drill shifted characters using your
-                        home-row-mod shift keys.
 
 File Mode
-    -start PARAGRAPH    The offset of the starting paragraph, set this to 0 to 
+    -start PARAGRAPH    The offset of the starting paragraph, set this to 0 to
                         reset progress on a given file.
+
 Aesthetics
     -showwpm            Display WPM whilst typing.
-    -theme THEMEFILE    The theme to use. 
+    -theme THEMEFILE    The theme to use.
     -w N                The maximum line length in characters (default: 60).
-                        This option is ignored if -raw is present.
+                        Ignored if -raw is present.
+    -notheme            Attempt to use the default terminal theme.
+                        This may produce odd results depending
+                        on the theme colours.
+    -blockcursor        Use the default cursor style.
+    -bold               Embolden typed text.
+                        ignored if -raw is present.
 
-    The Colemak-DH (matrix) layout is shown at the bottom of the screen. The
-    key producing the next character is highlighted in green, and the most
-    recent wrong key is highlighted in red. With -vil the loaded Vial layout
-    is shown instead; the layer or shift key to hold is highlighted in cyan.
+The Colemak-DH (matrix) layout is shown at the bottom of the screen. The key
+producing the next character is highlighted in green; pressing a wrong key
+highlights that key's location in red. With -vil the loaded Vial layout is
+shown instead, and the layer/shift key needed for the next character is
+highlighted in cyan.
 
 Test Parameters
     -t SECONDS          Terminate the test after the given number of seconds.
     -noskip             Disable word skipping when space is pressed.
+    -nobackspace        Disable the backspace key.
+    -nohighlight        Disable current and next word highlighting.
+    -highlight1         Only highlight the current word.
+    -highlight2         Only highlight the next word.
 
 Scripting
     -oneshot            Automatically exit after a single run.
     -noreport           Don't show a report at the end of a test.
     -csv                Print the test results to stdout in the form:
-                        [wpm],[cpm],[accuracy],[timestamp].
-    -raw                Don't reflow STDIN text or show one paragraph at a time. 
-                        Note that line breaks are determined exclusively by the 
+                        [type],[wpm],[cpm],[accuracy],[timestamp].
+    -json               Print the test output in JSON.
+    -raw                Don't reflow STDIN text or show one paragraph at a time.
+                        Note that line breaks are determined exclusively by the
                         input.
     -multi              Treat each input paragraph as a self contained test.
 
 Misc
-    -list TYPE          Lists internal resources of the given type. 
+    -list TYPE          Lists internal resources of the given type.
                         TYPE=[themes|quotes|words]
 
 Version

@@ -1,4 +1,12 @@
 # Unreleased:
+ - Documented the remaining flags in the plain-text usage summary and man page
+   (`-drill`, `-hrm`, `-nobackspace`, and the highlighting toggles), and removed
+   unused drawing and wrapping helpers.
+ - Layer tracking no longer hides the target key. While a layer key is held
+   the hint reads `held: num/sym — press 5`, and if the next character lives on
+   another layer it keeps the full `hold LT4 … + press 5` sequence. Characters
+   missing from the loaded layout now produce an explicit `no key for …` hint
+   instead of a blank line.
  - Moved the Chatsubo box between the practice text and the keyboard, and
    reserve enough rows that text, attribution, and timers do not overlap it.
    The box now shows the layer/shift guidance line first, then the model

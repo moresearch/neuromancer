@@ -258,9 +258,12 @@ nm -vil ~/keyboards/sofle.vil
 ```
 
 While you hold a thumb layer key, the matrix switches to that layer immediately,
-shows only that layer’s mappings, and the hint says `held: num/sym` (or the
-inferred layer name). Transparent keys are shown as `▽`. Releasing the key
-returns to automatic target-layer selection.
+shows only that layer’s mappings, and the hint keeps the target key, for example
+`held: num/sym — press 5`. If the next character lives on another layer, the
+full sequence is still shown (`held: base — hold LT4 (num/sym) + press 5`).
+Transparent keys are shown as `▽`. Releasing the key returns to automatic
+target-layer selection. Characters that do not exist on the loaded layout are
+reported as `no key for ";" in this layout` instead of a blank hint.
 
 Requirements:
 
@@ -349,7 +352,7 @@ Options:
 - `-chatsubo-every DURATION` — interval between comments (default `2m`)
 - `-ollama URL` / `-model NAME` — local Ollama settings
 
-## Aesthetics and output
+## Aesthetics and behavior
 
 ```bash
 nm -theme gruvbox
@@ -358,6 +361,11 @@ nm -showwpm
 nm -bold
 nm -blockcursor
 nm -w 72
+nm -noskip
+nm -nobackspace
+nm -nohighlight
+nm -highlight1
+nm -highlight2
 ```
 
 - `-theme FILE` selects a built-in or `~/.nm/themes/FILE` theme.
@@ -365,6 +373,10 @@ nm -w 72
 - `-showwpm` displays live WPM.
 - `-bold` emboldens typed text.
 - `-w N` wraps practice text to N columns (default 60; `-raw` ignores it).
+- `-noskip` disables automatic word skipping on Space.
+- `-nobackspace` disables Backspace.
+- `-nohighlight` disables word highlighting; `-highlight1` and
+  `-highlight2` keep only the current or next word highlighted.
 
 Scripting:
 
@@ -372,6 +384,7 @@ Scripting:
 nm -oneshot -noreport -t 30
 nm -csv  >> ~/wpm.csv
 nm -json > result.json
+nm -v                                # print the version
 ```
 
 `-csv` prints:

@@ -81,7 +81,6 @@ type vilActivator struct {
 type vilKeyRef struct {
 	row, col int
 	action   vilAction
-	shift    bool
 }
 
 const (
@@ -1539,11 +1538,8 @@ func (kb *vilKeyboard) findOnLayer(target rune, layer int) (vilKeyRef, bool) {
 	for row := range kb.layers[layer].matrix {
 		for col := range kb.layers[layer].matrix[row] {
 			a := kb.actionAt(layer, row, col)
-			if a.output == target {
+			if a.output == target || a.shifted == target {
 				return vilKeyRef{row: row, col: col, action: a}, true
-			}
-			if a.shifted == target {
-				return vilKeyRef{row: row, col: col, action: a, shift: true}, true
 			}
 		}
 	}
@@ -1552,6 +1548,13 @@ func (kb *vilKeyboard) findOnLayer(target rune, layer int) (vilKeyRef, bool) {
 }
 
 func (kb *vilKeyboard) hintText(h vilHint, found bool) string {
+	return kb.keyHintText(h, found, -1)
+}
+
+// keyHintText spells out how to press the target. When active is the layer
+// currently held or previewed, the layer activator is omitted because that
+// layer is already active; only the remaining key sequence is shown.
+func (kb *vilKeyboard) keyHintText(h vilHint, found bool, active int) string {
 	if !found {
 		return ""
 	}
@@ -1565,7 +1568,7 @@ func (kb *vilKeyboard) hintText(h vilHint, found bool) string {
 	}
 
 	prefix := ""
-	if h.layer != 0 {
+	if h.layer != 0 && h.layer != active {
 		name := kb.hintLayerName(h.layer)
 		if h.activator != nil {
 			verb := "hold"
@@ -1597,6 +1600,39 @@ func (kb *vilKeyboard) hintText(h vilHint, found bool) string {
 		return "press " + key
 	}
 	return prefix + "press " + key
+}
+
+// layerHintText prefixes the target guidance with the layer currently shown,
+// so holding a layer key does not hide which key to press.
+func (kb *vilKeyboard) layerHintText(prefix string, layer int, h vilHint, found bool) string {
+	status := prefix + ": " + kb.hintLayerName(layer)
+	guide := kb.keyHintText(h, found, layer)
+	if guide == "" {
+		return status
+	}
+	return status + " — " + guide
+}
+
+// hintForLayer returns guidance for target while the given layer is shown as
+// held or previewed. The layer activator is omitted when that layer is already
+// active, and targets that are not on the layout are reported explicitly.
+func (kb *vilKeyboard) hintForLayer(status string, layer int, target rune) string {
+	h, found := kb.findRune(target)
+	hint := kb.layerHintText(status, layer, h, found)
+	if !found {
+		if missing := noKeyHint(target); missing != "" {
+			hint += " — " + missing
+		}
+	}
+	return hint
+}
+
+// noKeyHint explains why a target has no guidance in this layout.
+func noKeyHint(target rune) string {
+	if target == 0 || target == '\n' {
+		return ""
+	}
+	return fmt.Sprintf("no key for %q in this layout", string(target))
 }
 
 func drawHintLine(scr tcell.Screen, y, x0, width int, text string, def tcell.Style) {
@@ -1714,9 +1750,13 @@ func (t *typer) drawVilKeyboard(target rune) {
 	hintText := kb.hintText(hint, found)
 	switch {
 	case physical:
-		hintText = "held: " + kb.hintLayerName(layer)
+		hintText = kb.hintForLayer("held", layer, target)
 	case preview:
-		hintText = "preview: " + kb.hintLayerName(layer)
+		hintText = kb.hintForLayer("preview", layer, target)
+	default:
+		if !found {
+			hintText = noKeyHint(target)
+		}
 	}
 	t.hintText = hintText
 	if t.chatsubo == nil {
@@ -1808,16 +1848,4 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 
 		drawKBButton(scr, x+(col-startCol)*(keyWidth+keyGap), y, keyWidth, keyH, label, top, style, border)
 	}
-}
-
-func drawCenteredLine(scr tcell.Screen, y int, s string, style tcell.Style) {
-	sw, _ := scr.Size()
-	r := []rune(s)
-	if sw <= 1 {
-		return
-	}
-	if len(r) > sw-1 {
-		r = r[:sw-1]
-	}
-	drawString(scr, (sw-len(r))/2, y, string(r), -1, style)
 }

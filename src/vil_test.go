@@ -478,3 +478,42 @@ func TestFindShiftPrefersHrm(t *testing.T) {
 		t.Fatal("no HRM drill generator")
 	}
 }
+
+func TestVilLayerHintKeepsKeyGuidance(t *testing.T) {
+	kb := loadTestVil(t, testVil)
+
+	h, ok := kb.findRune('!')
+	if !ok {
+		t.Fatal("! not found")
+	}
+
+	// While the target layer is held, the activator is already down; the hint
+	// must still say which key to press.
+	got := kb.layerHintText("held", h.layer, h, true)
+	if !strings.Contains(got, "held: lower") || !strings.Contains(got, "press !") {
+		t.Fatalf("held hint = %q", got)
+	}
+	if strings.Contains(got, "hold MO1") {
+		t.Fatalf("held hint repeats the activator: %q", got)
+	}
+
+	// While another layer is held, the hint keeps the full access sequence.
+	got = kb.layerHintText("held", 0, h, true)
+	if !strings.Contains(got, "held: base") || !strings.Contains(got, "hold MO1") || !strings.Contains(got, "press !") {
+		t.Fatalf("other-layer hint = %q", got)
+	}
+
+	got = kb.layerHintText("preview", h.layer, h, true)
+	if !strings.Contains(got, "preview: lower") || !strings.Contains(got, "press !") {
+		t.Fatalf("preview hint = %q", got)
+	}
+
+	got = kb.hintForLayer("held", h.layer, '7')
+	if !strings.Contains(got, "held: lower") || !strings.Contains(got, "no key") {
+		t.Fatalf("missing-key layer hint = %q", got)
+	}
+
+	if got := noKeyHint(';'); !strings.Contains(got, "no key") || !strings.Contains(got, ";") {
+		t.Fatalf("missing-key hint = %q", got)
+	}
+}

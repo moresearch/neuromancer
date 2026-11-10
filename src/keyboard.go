@@ -187,22 +187,6 @@ func (t *typer) keyboardVisible() (keyWidth, top int, ok bool) {
 	return m.keyWidth, m.top, ok
 }
 
-func drawKBBox(scr tcell.Screen, x, y, width int, label string, style tcell.Style) {
-	for i := 0; i < width; i++ {
-		scr.SetContent(x+i, y, ' ', nil, style)
-	}
-
-	runes := []rune(label)
-	if len(runes) > width {
-		runes = runes[:width]
-	}
-
-	start := x + (width-len(runes))/2
-	for i, c := range runes {
-		scr.SetContent(start+i, y, c, nil, style)
-	}
-}
-
 func buttonLabel(label string, max int) string {
 	r := []rune(label)
 	if len(r) <= max {
@@ -316,6 +300,9 @@ func (t *typer) hintFor(target rune) string {
 	}
 	if t.vil != nil {
 		hint, found := t.vil.findRune(target)
+		if !found {
+			return noKeyHint(target)
+		}
 		return t.vil.hintText(hint, found)
 	}
 	return builtinHint(target)
@@ -556,7 +543,6 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 		}
 		drawKBButton(t.Scr, spaceX, spaceY, spaceWidth, m.keyH, "space", "", spaceStyle, spaceBorder)
 	}
-
 }
 
 func (t *typer) markWrong(r rune) {

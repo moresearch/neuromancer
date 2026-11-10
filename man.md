@@ -55,6 +55,14 @@ usage: nm \[OPTION\]... \[FILE\]
 
 : Print the parsed matrix and every Vial layer, then exit.
 
+-drill
+
+: With **-vil**, generate a drill from characters that require a non-base layer.
+
+-hrm
+
+: With **-vil**, drill shifted characters using your home-row-mod shift keys.
+
 -layer-track
 
 : Follow physical layer keys by polling the Vial raw HID switch matrix on Linux. Enabled by default; use **-layer-track=false** to disable. Set `NM_HIDRAW=/dev/hidrawN` to choose the device, which must be readable/writable by your user and unlocked in Vial.
@@ -120,7 +128,7 @@ usage: nm \[OPTION\]... \[FILE\]
 
 : Embolden typed text.
 
--w 
+-w *N*
 
 : The maximum line length in characters (default: 60). This option is ignored if -raw is present.
 
@@ -133,6 +141,10 @@ usage: nm \[OPTION\]... \[FILE\]
 -noskip
 
 : Disable word skipping when space is pressed.
+
+-nobackspace
+
+: Disable the backspace key.
 
 -nohighlight
 
@@ -308,8 +320,10 @@ are determined exclusively by the input.
   key is held. This needs read/write access to the Vial `/dev/hidraw*` interface
   (set `NM_HIDRAW=/dev/hidrawN` to override auto-detection) and an unlocked Vial
   keyboard. While a layer key is held the matrix shows only that layer's own
-  mappings (transparent keys show `▽`) and the hint says `held: …`. Use
-  **-layer-track=false** to disable it.
+  mappings (transparent keys show `▽`) and the hint keeps the key to press
+  (`held: num/sym — press 5`); if the next character needs a different layer,
+  the full hold sequence is shown instead. Use **-layer-track=false** to
+  disable it.
 
   Without raw HID tracking (non-Linux, locked Vial, or no permission), the
   terminal only receives the text produced by the operating system, not the

@@ -191,8 +191,8 @@ func createTyper(scr tcell.Screen, bold bool, themeName string) *typer {
 var usage = `usage: nm [options] [file]
 
 Modes
-    -words  WORDFILE    Specifies the file from which words are randomly
-                        drawn (default: 1000en).
+    -words  WORDFILE    Specifies the file from which words are randomly drawn
+                        (default: 1000en).
     -quotes QUOTEFILE   Starts quote mode in which quotes are randomly drawn
                         from the given file. The file should be JSON encoded and
                         have the following form:
@@ -208,6 +208,10 @@ Modes
     -layer-track        Follow physical layer keys through the Vial raw HID
                         interface on Linux (default: on). Use
                         -layer-track=false to disable.
+    -drill              With -vil, generate a drill from characters that
+                        require a non-base layer.
+    -hrm                With -vil, drill shifted characters using your
+                        home-row-mod shift keys.
     -books DIR          Practice random paragraphs from .txt/.md/.text/.org
                         files in DIR.
 
@@ -226,21 +230,18 @@ Ollama (optional)
 Word Mode
     -n GROUPSZ          Sets the number of words which constitute a group.
     -g NGROUPS          Sets the number of groups which constitute a test.
-    -drill              With -vil, generate a drill from characters that
-                        require a non-base layer.
-    -hrm                With -vil, drill shifted characters using your
-                        home-row-mod shift keys.
 
 File Mode
     -start PARAGRAPH    The offset of the starting paragraph, set this to 0 to
                         reset progress on a given file.
+
 Aesthetics
     -showwpm            Display WPM whilst typing.
-    -theme THEMEFILE    The theme to use. 
+    -theme THEMEFILE    The theme to use.
     -w N                The maximum line length in characters (default: 60).
                         Ignored if -raw is present.
-    -notheme            Attempt to use the default terminal theme. 
-                        This may produce odd results depending 
+    -notheme            Attempt to use the default terminal theme.
+                        This may produce odd results depending
                         on the theme colours.
     -blockcursor        Use the default cursor style.
     -bold               Embolden typed text.
@@ -285,10 +286,12 @@ Examples
     nm -n 25 -g 4
     nm -vil ~/sofle.vil
     nm -vil ~/sofle.vil -layernames base,mouse,num,fn,shift,ctrl
+    nm -vil ~/sofle.vil -vil-info
     nm -vil ~/sofle.vil -books ./books
     nm -vil ~/sofle.vil lesson.txt
     nm -vil ~/sofle.vil -chatsubo -chatsubo-every 1m -model qwen3.5:0.8b
     nm -model qwen3:0.6b -gen "home row words"
+    nm -oneshot -noreport -t 60
 `
 
 func saveMistakes(mistakes []mistake) {

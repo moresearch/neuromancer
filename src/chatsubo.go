@@ -265,7 +265,7 @@ func (t *typer) maybeChatsubo(text, typed []rune, idx int) {
 	hint := t.hintFor(target)
 	if t.layerTracker != nil && t.vil != nil {
 		if layer := t.layerTracker.Layer(); layer >= 0 && layer < len(t.vil.layers) {
-			hint = "held: " + t.vil.hintLayerName(layer)
+			hint = t.vil.hintForLayer("held", layer, target)
 		}
 	}
 	snap := chatsuboSnapshot{
