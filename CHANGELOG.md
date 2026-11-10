@@ -1,4 +1,11 @@
 # Unreleased:
+ - Book mode now uses Ollama by default: each sprint types a one-sentence
+   summary (20 words max) of a random paragraph. The text is rendered inside the
+   Chatsubo panel between the keyboard halves. A small summary queue is
+   prefetched before the UI starts (with a progress line) and refilled in the
+   background so sprints start immediately. The blocking report screen is
+   skipped so sprints flow into each other. Use `-books-raw` to type the
+   paragraph itself.
  - Practice text now spans the full keyboard width by default (both splits plus
    the gap) instead of stopping at 60 columns. The text area's edges line up
    with the outer keycaps, and the text/gap/keyboard block is centered as a

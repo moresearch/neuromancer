@@ -220,7 +220,7 @@ func (t *typer) keyboardMetrics() (kbMetrics, bool) {
 	if sw >= kbWideScreen {
 		splitGap = kbWideSplitGap
 	}
-	if t.chatsubo != nil && sw >= chatsuboMinScreenWidth {
+	if (t.chatsubo != nil || t.sprint) && sw >= chatsuboMinScreenWidth {
 		splitGap = chatsuboBoxWidth + 4
 	}
 

@@ -195,6 +195,22 @@ nm -books ./books
 Paragraphs shorter than 80 characters are skipped, which filters out headings
 and page numbers. The `./books` directory is gitignored.
 
+Book mode uses Ollama by default: it asks for a one-sentence summary (20 words
+max) of a random paragraph and uses that as the sprint text. The text is shown
+inside the Chatsubo panel between the keyboard halves. A small queue of
+summaries is prefetched before the UI starts (with a progress line) and
+refilled in the background, so the next sprint starts immediately. The blocking
+report screen is skipped so the sprints flow into each other.
+
+Use `-books-raw` to type the paragraph itself instead:
+
+```bash
+nm -books ./books -books-raw
+```
+
+Live `-chatsubo` commentary is disabled in book sprint mode because the panel
+is the typing area.
+
 ### Vial keymaps
 
 ```bash

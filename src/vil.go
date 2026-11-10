@@ -1780,7 +1780,7 @@ func (t *typer) drawVilKeyboard(target rune) {
 		}
 	}
 	t.hintText = t.withFinger(hintText, target)
-	if t.chatsubo == nil {
+	if t.chatsubo == nil && !t.sprint {
 		drawHintLine(t.Scr, hintY, x0, width, hintText, t.defaultStyle)
 	}
 }

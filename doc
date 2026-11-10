@@ -22,8 +22,10 @@ Modes
                         require a non-base layer.
     -hrm                With -vil, drill shifted characters using your
                         home-row-mod shift keys.
-    -books DIR          Practice random paragraphs from .txt/.md/.text/.org
-                        files in DIR.
+    -books DIR          Practice an Ollama summary (20 words max) of a random
+                        paragraph from .txt/.md/.text/.org files in DIR.
+    -books-raw          With -books, type the paragraph itself instead of the
+                        Ollama summary.
 
 Ollama (optional)
     -gen PROMPT         Generate a drill with a local Ollama model. Works with

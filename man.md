@@ -69,7 +69,11 @@ usage: nm \[OPTION\]... \[FILE\]
 
 -books *DIR*
 
-: Draw random paragraphs from `.txt`, `.md`, `.text`, or `.org` files in DIR. Paragraphs shorter than 80 characters are skipped.
+: Draw random paragraphs from `.txt`, `.md`, `.text`, or `.org` files in DIR. By default each sprint types a one-sentence Ollama summary (20 words max) of the paragraph, shown inside the Chatsubo panel. Paragraphs shorter than 80 characters are skipped.
+
+-books-raw
+
+: With **-books**, type the paragraph itself instead of the Ollama summary.
 
 -gen *PROMPT*
 
@@ -281,9 +285,22 @@ are determined exclusively by the input.
   nm -books ./books
   ```
 
-  Paragraphs shorter than 80 characters are skipped. The source filename is
-  shown below the paragraph. Books can be combined with **-vil** so layer and
-  HRM guidance stays active.
+  Paragraphs shorter than 80 characters are skipped. Books can be combined with
+  **-vil** so layer and HRM guidance stays active.
+
+  Book mode uses Ollama by default: each sprint types a one-sentence summary
+  (20 words max) of a random paragraph, displayed inside the Chatsubo panel
+  between the keyboard halves. A small queue of summaries is prefetched before
+  the UI starts (with a progress line) and refilled in the background, so the
+  next sprint starts immediately. The blocking report screen is skipped so the
+  sprints flow into each other. Use **-books-raw** to type the paragraph itself:
+
+  ```
+  nm -books ./books -books-raw
+  ```
+
+  Live **-chatsubo** commentary is disabled in book sprint mode because the
+  panel is the typing area.
 
 ## OLLAMA
 

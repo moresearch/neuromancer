@@ -60,6 +60,8 @@ type typer struct {
 	previewLayer int
 	blinkOn      bool
 	chatsubo     *chatsubo
+	sprint       bool
+	panelLabel   string
 	layoutTop    int
 	hintText     string
 	layerTracker *layerTracker
@@ -191,53 +193,82 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	t.layoutTop = -1
 	m, kbOK := t.keyboardMetrics()
 
-	// The text area spans the full keyboard width, so its left and right
-	// edges line up with the outer keycaps of both splits.
 	nc := textW
-	if kbOK {
-		if w := t.keyboardWidth(m); w > 0 {
-			nc = w
-		}
-	}
-	if nc > sw {
-		nc = sw
-	}
-	if nc < 1 {
-		nc = 1
-	}
-	x := (sw - nc) / 2
-
-	if t.chatsubo != nil {
-		t.chatsubo.resetSegment()
-	}
-
-	// Center the whole block (text, attribution/timer, gap, keyboard) both
-	// horizontally and vertically. The keyboard itself is centered by the
-	// metrics code; here we position the text and the vertical offset.
+	x := 0
 	y := (sh - nr) / 2
-	if kbOK {
-		extra := 0
-		if attribution != "" {
-			_, ah := calcStringDimensions(attribution)
-			extra += ah
+	placed := false
+
+	if t.sprint && kbOK {
+		// Sprint mode: center the keyboard/chatsubo block and type inside the
+		// chatsubo body.
+		kbTop := (sh - m.height) / 2
+		if kbTop < 2 {
+			kbTop = 2
 		}
-		if timeLimit != -1 {
-			extra++
-		}
-		contentH := nr + extra + layoutSplitPad + m.height
-		if contentH <= sh {
-			y = (sh - contentH) / 2
-			t.layoutTop = y + nr + extra + layoutSplitPad
-		} else {
-			y = 0
-			t.layoutTop = sh - m.height
-			if t.layoutTop < nr+extra+layoutSplitPad {
-				t.layoutTop = nr + extra + layoutSplitPad
+		t.layoutTop = kbTop
+		if m2, ok := t.keyboardMetrics(); ok {
+			if tx, ty, tw, rows, ok := t.sprintTextArea(m2); ok {
+				nc = tw
+				x = tx
+				if nr > rows {
+					nr = rows
+				}
+				y = ty + (rows-nr)/2
+				placed = true
 			}
 		}
 	}
-	if y < 0 {
-		y = 0
+
+	if !placed {
+		t.layoutTop = -1
+
+		// The text area spans the full keyboard width, so its left and right
+		// edges line up with the outer keycaps of both splits.
+		if kbOK {
+			if w := t.keyboardWidth(m); w > 0 {
+				nc = w
+			}
+		}
+		if nc > sw {
+			nc = sw
+		}
+		if nc < 1 {
+			nc = 1
+		}
+		x = (sw - nc) / 2
+
+		// Center the whole block (text, attribution/timer, gap, keyboard) both
+		// horizontally and vertically. The keyboard itself is centered by the
+		// metrics code; here we position the text and the vertical offset.
+		y = (sh - nr) / 2
+		if kbOK {
+			extra := 0
+			if attribution != "" {
+				_, ah := calcStringDimensions(attribution)
+				extra += ah
+			}
+			if timeLimit != -1 {
+				extra++
+			}
+			contentH := nr + extra + layoutSplitPad + m.height
+			if contentH <= sh {
+				y = (sh - contentH) / 2
+				t.layoutTop = y + nr + extra + layoutSplitPad
+			} else {
+				y = 0
+				t.layoutTop = sh - m.height
+				if t.layoutTop < nr+extra+layoutSplitPad {
+					t.layoutTop = nr + extra + layoutSplitPad
+				}
+			}
+		}
+		if y < 0 {
+			y = 0
+		}
+	}
+
+	if t.chatsubo != nil {
+		t.chatsubo.resetSegment()
 	}
 
 	t.wrongKey = 0
@@ -275,6 +306,28 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	}
 
 	redraw := func() {
+		var target rune
+		if idx < len(text) {
+			target = text[idx]
+		}
+
+		if t.sprint {
+			t.panelLabel = " chatsubo "
+			if timeLimit != -1 && !startTime.IsZero() {
+				remaining := timeLimit - time.Now().Sub(startTime)
+				secs := int(remaining/time.Second) + 1
+				if secs < 0 {
+					secs = 0
+				}
+				t.panelLabel = fmt.Sprintf(" chatsubo %ds ", secs)
+			}
+		}
+
+		// Draw the matrix and panel frame before the text so sprint text lands
+		// inside the chatsubo body instead of under its border.
+		t.drawKeyboard(target)
+		t.drawChatsubo()
+
 		cx := x
 		cy := y
 		inword := -1
@@ -320,27 +373,22 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			cx++
 		}
 
-		aw, ah := calcStringDimensions(attribution)
-		drawString(t.Scr, x+nc-aw, y+nr+1, attribution, -1, t.defaultStyle)
+		if !t.sprint {
+			aw, ah := calcStringDimensions(attribution)
+			drawString(t.Scr, x+nc-aw, y+nr+1, attribution, -1, t.defaultStyle)
 
-		var target rune
-		if idx < len(text) {
-			target = text[idx]
-		}
-		t.drawKeyboard(target)
-		t.drawChatsubo()
+			if timeLimit != -1 && !startTime.IsZero() {
+				remaining := timeLimit - time.Now().Sub(startTime)
+				drawString(t.Scr, x+nc/2, y+nr+ah+1, "      ", -1, t.defaultStyle)
+				drawString(t.Scr, x+nc/2, y+nr+ah+1, strconv.Itoa(int(remaining/1e9)+1), -1, t.defaultStyle)
+			}
 
-		if timeLimit != -1 && !startTime.IsZero() {
-			remaining := timeLimit - time.Now().Sub(startTime)
-			drawString(t.Scr, x+nc/2, y+nr+ah+1, "      ", -1, t.defaultStyle)
-			drawString(t.Scr, x+nc/2, y+nr+ah+1, strconv.Itoa(int(remaining/1e9)+1), -1, t.defaultStyle)
-		}
-
-		if t.ShowWpm && !startTime.IsZero() {
-			calcStats()
-			if duration > 1e7 { //Avoid flashing large numbers on test start.
-				wpm := int((float64(ncorrect) / 5) / (float64(duration) / 60e9))
-				drawString(t.Scr, x+nc/2-4, y-2, fmt.Sprintf("WPM: %-10d\n", wpm), -1, t.defaultStyle)
+			if t.ShowWpm && !startTime.IsZero() {
+				calcStats()
+				if duration > 1e7 { //Avoid flashing large numbers on test start.
+					wpm := int((float64(ncorrect) / 5) / (float64(duration) / 60e9))
+					drawString(t.Scr, x+nc/2-4, y-2, fmt.Sprintf("WPM: %-10d\n", wpm), -1, t.defaultStyle)
+				}
 			}
 		}
 

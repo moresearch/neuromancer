@@ -318,22 +318,16 @@ func (t *typer) chatPanelGap(m kbMetrics) (int, bool) {
 	return x0 + kbSplitLeftWidth(m.keyWidth, m.keyGap), true
 }
 
-func (t *typer) drawChatsubo() {
-	if t.chatsubo == nil || t.Scr == nil {
-		return
-	}
-
+// chatPanelRect returns the panel rectangle, or ok=false when the layout is
+// not split or the panel cannot fit.
+func (t *typer) chatPanelRect(m kbMetrics) (x, y, width, height int, ok bool) {
 	sw, sh := t.Scr.Size()
-	m, ok := t.keyboardMetrics()
-	if !ok {
-		return
-	}
 	gapX, split := t.chatPanelGap(m)
 	if !split {
-		return
+		return 0, 0, 0, 0, false
 	}
 
-	width := chatsuboBoxWidth
+	width = chatsuboBoxWidth
 	if width > m.splitGap-2 {
 		width = m.splitGap - 2
 	}
@@ -341,10 +335,10 @@ func (t *typer) drawChatsubo() {
 		width = sw - 8
 	}
 	if width < 12 {
-		return
+		return 0, 0, 0, 0, false
 	}
 
-	height := chatsuboMaxKeyRows*m.keyH + (chatsuboMaxKeyRows-1)*m.rowGap + chatsuboExtraRows
+	height = chatsuboMaxKeyRows*m.keyH + (chatsuboMaxKeyRows-1)*m.rowGap + chatsuboExtraRows
 	if height < chatsuboCompactHeight {
 		height = chatsuboCompactHeight
 	}
@@ -355,12 +349,107 @@ func (t *typer) drawChatsubo() {
 		height = sh - m.top
 	}
 	if height < chatsuboCompactHeight+1 {
+		return 0, 0, 0, 0, false
+	}
+
+	x = gapX + (m.splitGap-width)/2
+	y = m.top + (m.height-height)/2
+	if x < 1 || x+width > sw-1 {
+		return 0, 0, 0, 0, false
+	}
+	return x, y, width, height, true
+}
+
+// sprintTextArea is the typing area inside the chatsubo body.
+func (t *typer) sprintTextArea(m kbMetrics) (x, y, width, rows int, ok bool) {
+	px, py, pw, ph, ok := t.chatPanelRect(m)
+	if !ok {
+		return 0, 0, 0, 0, false
+	}
+	topPad := 0
+	rows = ph - 2
+	if ph >= chatsuboFullHeight {
+		topPad = 1
+		rows = ph - 4
+	}
+	if rows < 1 || pw < 12 {
+		return 0, 0, 0, 0, false
+	}
+	return px + 3, py + 1 + topPad, pw - 6, rows, true
+}
+
+func (t *typer) drawSprintPanel(x, y, width, height int) {
+	border := t.defaultStyle.Foreground(tcell.ColorTeal)
+	label := t.panelLabel
+	if label == "" || len([]rune(label)) > width-2 {
+		label = " chatsubo "
+	}
+	top := "╭" + label + strings.Repeat("─", width-2-len([]rune(label))) + "╮"
+	drawString(t.Scr, x, y, top, -1, border)
+	for row := 1; row < height-1; row++ {
+		line := "│" + strings.Repeat(" ", width-2) + "│"
+		drawString(t.Scr, x, y+row, line, -1, t.defaultStyle)
+	}
+	bottom := "╰" + strings.Repeat("─", width-2) + "╯"
+	drawString(t.Scr, x, y+height-1, bottom, -1, border)
+}
+
+// showSprintMessage clears the sprint panel and shows a short status message
+// while the next summary is being generated.
+func (t *typer) showSprintMessage(msg string) {
+	if t.Scr == nil || !t.sprint {
+		return
+	}
+	_, sh := t.Scr.Size()
+	t.layoutTop = -1
+	m, ok := t.keyboardMetrics()
+	if !ok {
+		return
+	}
+	top := (sh - m.height) / 2
+	if top < 2 {
+		top = 2
+	}
+	t.layoutTop = top
+	m, ok = t.keyboardMetrics()
+	if !ok {
+		return
+	}
+	x, y, width, height, ok := t.chatPanelRect(m)
+	if !ok {
+		return
+	}
+	t.panelLabel = " chatsubo "
+	t.drawKeyboard(0)
+	t.drawSprintPanel(x, y, width, height)
+	if bx, by, bw, rows, ok := t.sprintTextArea(m); ok {
+		r := []rune(msg)
+		if len(r) > bw {
+			r = r[:bw]
+		}
+		drawString(t.Scr, bx+(bw-len(r))/2, by+rows/2, string(r), -1, t.defaultStyle)
+	}
+	t.Scr.Show()
+}
+
+func (t *typer) drawChatsubo() {
+	if t.Scr == nil {
+		return
+	}
+	if t.chatsubo == nil && !t.sprint {
 		return
 	}
 
-	y := m.top + (m.height-height)/2
-	x := gapX + (m.splitGap-width)/2
-	if x < 1 || x+width > sw-1 {
+	m, ok := t.keyboardMetrics()
+	if !ok {
+		return
+	}
+	x, y, width, height, ok := t.chatPanelRect(m)
+	if !ok {
+		return
+	}
+	if t.sprint {
+		t.drawSprintPanel(x, y, width, height)
 		return
 	}
 

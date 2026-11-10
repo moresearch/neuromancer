@@ -212,8 +212,10 @@ Modes
                         require a non-base layer.
     -hrm                With -vil, drill shifted characters using your
                         home-row-mod shift keys.
-    -books DIR          Practice random paragraphs from .txt/.md/.text/.org
-                        files in DIR.
+    -books DIR          Practice a short Ollama summary (20 words max) of a
+                        random paragraph from .txt/.md/.text/.org files in DIR.
+    -books-raw          With -books, type the paragraph itself instead of the
+                        Ollama summary.
 
 Ollama (optional)
     -gen PROMPT         Generate a drill with a local Ollama model. Works with
@@ -288,6 +290,8 @@ Examples
     nm -vil ~/sofle.vil -layernames base,mouse,num,fn,shift,ctrl
     nm -vil ~/sofle.vil -vil-info
     nm -vil ~/sofle.vil -books ./books
+    nm -books ./books
+    nm -books ./books -books-raw
     nm -vil ~/sofle.vil lesson.txt
     nm -vil ~/sofle.vil -chatsubo -chatsubo-every 1m -model qwen3.5:0.8b
     nm -model qwen3:0.6b -gen "home row words"
@@ -331,6 +335,7 @@ func main() {
 	var vilSplit string
 	var vilInfo bool
 	var booksDir string
+	var booksRaw bool
 	var genPrompt string
 	var ollamaURL string
 	var ollamaModel string
@@ -348,6 +353,7 @@ func main() {
 
 	var err error
 	var testFn func() []segment
+	var sprintQueue *bookSummaryQueue
 
 	flag.IntVar(&n, "n", 50, "")
 	flag.IntVar(&g, "g", 1, "")
@@ -365,6 +371,7 @@ func main() {
 	flag.StringVar(&vilSplit, "vil-split", "auto", "")
 	flag.BoolVar(&vilInfo, "vil-info", false, "")
 	flag.StringVar(&booksDir, "books", "", "")
+	flag.BoolVar(&booksRaw, "books-raw", false, "")
 	flag.StringVar(&genPrompt, "gen", "", "")
 	flag.StringVar(&ollamaURL, "ollama", normalizeOllamaURL(envOr("OLLAMA_HOST", defaultOllamaURL)), "")
 	flag.StringVar(&ollamaModel, "model", envOr("OLLAMA_MODEL", ""), "")
@@ -495,13 +502,17 @@ func main() {
 	if startParagraph >= 0 && len(flag.Args()) == 0 {
 		usageError("-start requires a file argument")
 	}
+	if booksRaw && booksDir == "" {
+		usageError("-books-raw requires -books DIR")
+	}
+	booksSummary := booksDir != "" && !booksRaw
 
-	if genPrompt == "" && !chatsuboMode {
+	if genPrompt == "" && !chatsuboMode && !booksSummary {
 		if set["model"] {
-			warnf("-model has no effect without -gen or -chatsubo")
+			warnf("-model has no effect without -gen, -chatsubo, or -books")
 		}
 		if set["ollama"] {
-			warnf("-ollama has no effect without -gen or -chatsubo")
+			warnf("-ollama has no effect without -gen, -chatsubo, or -books")
 		}
 	}
 	if !chatsuboMode && set["chatsubo-every"] {
@@ -532,7 +543,7 @@ func main() {
 		usageError("-vil-split and -vil-info require -vil FILE")
 	}
 
-	if genPrompt != "" || chatsuboMode {
+	if genPrompt != "" || chatsuboMode || booksSummary {
 		ollamaURL = normalizeOllamaURL(ollamaURL)
 		resolved, err := resolveOllamaModel(ollamaURL, ollamaModel)
 		if err != nil {
@@ -554,7 +565,22 @@ func main() {
 		}
 		testFn = generateLLMDrill(lesson, n, g)
 	case booksDir != "":
-		testFn = generateBookTest(booksDir)
+		if booksSummary {
+			q, err := newBookSummaryQueue(booksDir, bookSummaryQueueSize, func(paragraph string) (string, error) {
+				return requestOllamaBookSummary(ollamaURL, ollamaModel, paragraph, vilKB)
+			})
+			if err != nil {
+				die("Failed to prepare book summaries from %s: %v", booksDir, err)
+			}
+			q.prefill(func(done, total int) {
+				fmt.Fprintf(os.Stderr, "\rSummarizing book paragraphs %d/%d...", done, total)
+			})
+			fmt.Fprintln(os.Stderr)
+			sprintQueue = q
+			testFn = q.next
+		} else {
+			testFn = generateBookTest(booksDir)
+		}
 	case drillMode:
 		if vilKB == nil {
 			die("-drill requires -vil <file>")
@@ -634,8 +660,13 @@ func main() {
 			typer.layerTracker = tracker
 		}
 	}
+	typer.sprint = booksSummary
 	if chatsuboMode {
-		typer.chatsubo = newChatsubo(ollamaURL, ollamaModel, chatsuboEvery, chatsuboLayoutSummary(vilKB))
+		if typer.sprint {
+			warnf("-chatsubo is disabled in book sprint mode")
+		} else {
+			typer.chatsubo = newChatsubo(ollamaURL, ollamaModel, chatsuboEvery, chatsuboLayoutSummary(vilKB))
+		}
 	}
 
 	reflow := func(s string) string {
@@ -643,10 +674,22 @@ func main() {
 		typer.layoutTop = -1
 		top := sh
 		wsz := maxLineLen
+		maxLines := 0
+
 		if m, ok := typer.keyboardMetrics(); ok {
 			top = m.top
 			if wsz == 0 {
 				wsz = typer.keyboardWidth(m)
+			}
+			if typer.sprint {
+				if _, _, w, rows, ok := typer.sprintTextArea(m); ok {
+					if maxLineLen == 0 || maxLineLen > w {
+						wsz = w
+					} else {
+						wsz = maxLineLen
+					}
+					maxLines = rows
+				}
 			}
 		}
 		if wsz == 0 {
@@ -658,11 +701,13 @@ func main() {
 		if wsz < 1 {
 			wsz = 1
 		}
-		// Leave room for the gap above the splits and the attribution/timer
-		// line below the text.
-		maxLines := top - 2 - layoutSplitPad
-		if maxLines < 1 {
-			maxLines = 1
+		if maxLines == 0 {
+			// Leave room for the gap above the splits and the attribution/
+			// timer line below the text.
+			maxLines = top - 2 - layoutSplitPad
+			if maxLines < 1 {
+				maxLines = 1
+			}
 		}
 		return trimText(s, wsz, maxLines)
 	}
@@ -673,9 +718,13 @@ func main() {
 
 	var tests [][]segment
 	var idx = 0
+	sprintStatus := "summarizing next sprint..."
 
 	for {
 		if idx >= len(tests) {
+			if typer.sprint && (sprintQueue == nil || !sprintQueue.ready()) {
+				typer.showSprintMessage(sprintStatus)
+			}
 			tests = append(tests, testFn())
 		}
 
@@ -683,7 +732,7 @@ func main() {
 			exit(0)
 		}
 
-		if !rawMode {
+		if !rawMode || typer.sprint {
 			for i, _ := range tests[idx] {
 				tests[idx][i].Text = reflow(tests[idx][i].Text)
 			}
@@ -711,7 +760,10 @@ func main() {
 			}
 
 			results = append(results, result{wpm, cpm, accuracy, time.Now().Unix(), mistakes})
-			if !noReport {
+			if typer.sprint {
+				sprintStatus = fmt.Sprintf("%d wpm · %.0f%% · next...", wpm, accuracy)
+			}
+			if !noReport && !typer.sprint {
 				attribution := ""
 				if len(tests[idx]) == 1 {
 					attribution = tests[idx][0].Attribution

@@ -323,6 +323,63 @@ func requestOllamaText(baseURL, model, system, user string, maxTokens int) (stri
 		map[string]interface{}{"temperature": 0.8, "num_predict": maxTokens}, &think)
 }
 
+var typingPunct = strings.NewReplacer(
+	"‘", "'", "’", "'",
+	"“", "\"", "”", "\"",
+	"–", "-", "—", "-",
+	"…", "...",
+)
+
+func validateTypingText(kb *vilKeyboard, text string) error {
+	for _, r := range text {
+		if r == ' ' || r == '\n' || r == '\r' || r == '\t' {
+			continue
+		}
+		if kb == nil {
+			if r < 32 || r > 126 {
+				return fmt.Errorf("Ollama returned unsupported character %q", r)
+			}
+			continue
+		}
+		if _, ok := kb.findRune(r); !ok {
+			return fmt.Errorf("Ollama returned unsupported character %q", r)
+		}
+	}
+	return nil
+}
+
+// requestOllamaBookSummary turns one book paragraph into a single short
+// sentence suitable for a fast typing sprint.
+func requestOllamaBookSummary(baseURL, model, paragraph string, kb *vilKeyboard) (string, error) {
+	if r := []rune(paragraph); len(r) > 2000 {
+		paragraph = string(r[:2000])
+	}
+	system := `You summarize a book paragraph for a fast typing sprint.
+Return one short, natural English sentence of at most 20 words (about 160
+characters). Keep concrete nouns and verbs from the paragraph. Use only
+printable ASCII, straight quotes, and hyphens. No markdown, no quotation marks
+around the sentence, no commentary, no extra sentences.`
+
+	think := false
+	text, err := ollamaGenerate(baseURL, model, system+"\n\nparagraph:\n"+paragraph, "",
+		map[string]interface{}{"temperature": 0.3, "num_predict": 80}, &think)
+	if err != nil {
+		return "", err
+	}
+	text = typingPunct.Replace(text)
+	text = strings.Join(strings.Fields(text), " ")
+	text = strings.Trim(text, "\"'` ")
+	text = clipTypingWords(text, bookSummaryMaxWords)
+	text = clipTypingText(text, bookSummaryMaxRunes)
+	if text == "" {
+		return "", fmt.Errorf("Ollama returned an empty summary")
+	}
+	if err := validateTypingText(kb, text); err != nil {
+		return "", err
+	}
+	return text, nil
+}
+
 func requestOllamaLesson(baseURL, model, prompt string, kb *vilKeyboard) (genLesson, error) {
 	allowed := strings.Join(typableRunes(kb), "")
 	layout := "builtin Colemak-DH"
