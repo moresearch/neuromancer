@@ -44,6 +44,10 @@ type typer struct {
 	BlockCursor      bool
 	tty              io.Writer
 
+	// When > 0, highlight this many non-space characters ahead of the cursor
+	// instead of the current and next word.
+	HighlightChars int
+
 	currentWordStyle    tcell.Style
 	nextWordStyle       tcell.Style
 	incorrectSpaceStyle tcell.Style
@@ -331,6 +335,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 		cx := x
 		cy := y
 		inword := -1
+		ahead := 0
 
 		for i := range text {
 			style := t.defaultStyle
@@ -349,7 +354,18 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 				inword = 0
 			}
 
-			if i >= idx {
+			if i >= idx && t.HighlightChars > 0 {
+				if text[i] == ' ' {
+					style = t.defaultStyle
+				} else if ahead < t.HighlightChars {
+					if ahead == 0 {
+						style = t.currentWordStyle
+					} else {
+						style = t.nextWordStyle
+					}
+					ahead++
+				}
+			} else if i >= idx {
 				if text[i] == ' ' {
 					inword++
 				} else if inword == 0 {

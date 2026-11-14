@@ -262,6 +262,9 @@ Test Parameters
     -nohighlight        Disable current and next word highlighting.
     -highlight1         Only highlight the current word.
     -highlight2         Only highlight the next word.
+    -highlightchars N   Highlight only the next N characters (spaces excluded)
+                        instead of the current and next word. Useful for
+                        drilling speed.
 
 Scripting
     -oneshot            Automatically exit after a single run.
@@ -318,6 +321,7 @@ func main() {
 	var noHighlightCurrent bool
 	var noHighlightNext bool
 	var noHighlight bool
+	var highlightChars int
 	var maxLineLen int
 	var noSkip bool
 	var noBackspace bool
@@ -390,6 +394,7 @@ func main() {
 	flag.BoolVar(&noHighlight, "nohighlight", false, "")
 	flag.BoolVar(&noHighlightCurrent, "highlight2", false, "")
 	flag.BoolVar(&noHighlightNext, "highlight1", false, "")
+	flag.IntVar(&highlightChars, "highlightchars", 0, "")
 	flag.BoolVar(&noReport, "noreport", false, "")
 	flag.BoolVar(&boldFlag, "bold", false, "")
 	flag.BoolVar(&csvMode, "csv", false, "")
@@ -637,6 +642,8 @@ func main() {
 	} else {
 		typer = createTyper(scr, boldFlag, themeName)
 	}
+
+	typer.HighlightChars = highlightChars
 
 	if noHighlightNext || noHighlight {
 		typer.currentWordStyle = typer.nextWordStyle
