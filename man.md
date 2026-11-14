@@ -162,6 +162,12 @@ usage: nm \[OPTION\]... \[FILE\]
 
 : Only highlight the next word.
 
+-highlightchars N
+
+: Highlight only the next N characters, not counting spaces, instead of whole
+  words. A fixed look-ahead is easier to train for speed. Use this on its own;
+  it is not combined with -highlight1 or -highlight2.
+
 ## Scripting
 
 -oneshot

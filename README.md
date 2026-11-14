@@ -5,7 +5,7 @@ the keyboard matrix while you type, highlights the key for the next character,
 teaches layer and HRM sequences, and can pull practice text from word lists,
 quotes, books, generated drills, or live coaching.
 
-![](demo.gif)
+![nm typing session](docs/plain.png)
 
 ## Features
 
@@ -386,9 +386,11 @@ nm -blockcursor
 nm -w 72
 nm -noskip
 nm -nobackspace
+nm -showwpm -t 60
 nm -nohighlight
 nm -highlight1
 nm -highlight2
+nm -highlightchars 3
 ```
 
 - `-theme FILE` selects a built-in or `~/.nm/themes/FILE` theme.
@@ -400,6 +402,21 @@ nm -highlight2
 - `-nobackspace` disables Backspace.
 - `-nohighlight` disables word highlighting; `-highlight1` and
   `-highlight2` keep only the current or next word highlighted.
+- `-highlightchars N` highlights only the next N characters (spaces are not
+  counted) instead of whole words. A fixed look-ahead is easier to train for
+  speed than whole words. Use it on its own; it is not combined with
+  `-highlight1`/`-highlight2`.
+
+![next three characters highlighted with -highlightchars 3](docs/chars3.png)
+
+With `-showwpm` the live score appears above the text and the timed run counts
+down below it:
+
+![live WPM while typing](docs/wpm.png)
+
+At the end of a run `nm` shows a report:
+
+![end of run report](docs/report.png)
 
 Scripting:
 
