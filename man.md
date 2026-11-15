@@ -41,7 +41,8 @@ usage: nm \[OPTION\]... \[FILE\]
 
 -vil *FILE*
 
-: Load a Vial `.vil` keymap. While typing, the matrix and the layer required for the next character are shown. Green marks the key to press, cyan marks the layer or shift key to hold, and red marks the most recent wrong key.
+: Load a Vial `.vil` keymap. If omitted, `~/.config/nm/*.vil` is used when
+  exactly one layout is installed there. While typing, the matrix and the layer required for the next character are shown. Green marks the key to press, cyan marks the layer or shift key to hold, and red marks the most recent wrong key.
 
 -layernames *NAMES*
 

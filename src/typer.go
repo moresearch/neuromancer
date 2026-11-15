@@ -589,10 +589,23 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 				drawString(t.Scr, x+nc/2, y+nr+ah+1, strconv.Itoa(int(remaining/1e9)+1), -1, t.defaultStyle)
 			}
 
-			// Show the HUD unless the panel is carrying the stats.
-			if !t.panelDrawn {
-				t.drawLiveStats(x+nc/2, statsY, t.curWpm, t.curCpm, t.curAcc, t.curErrs)
+		}
+
+		// Show the HUD unless the chatsubo panel is carrying the stats.
+		if !t.panelDrawn {
+			hudX, hudY := x+nc/2, statsY
+			if t.sprint {
+				// Sprint draws its text inside the panel, so the HUD goes
+				// just above the panel frame, centered on the screen.
+				sw, _ := t.Scr.Size()
+				hudX = sw / 2
+				if m, ok := t.keyboardMetrics(); ok && m.top > 0 {
+					hudY = m.top - 1
+				} else {
+					hudY = 1
+				}
 			}
+			t.drawLiveStats(hudX, hudY, t.curWpm, t.curCpm, t.curAcc, t.curErrs)
 		}
 
 		//Potentially inefficient, but seems to be good enough

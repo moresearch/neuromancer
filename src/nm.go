@@ -57,6 +57,20 @@ func usageError(format string, args ...interface{}) {
 	os.Exit(2)
 }
 
+// defaultVilPath returns the Vial layout to use when -vil is not given:
+// ~/.config/nm/*.vil if there is exactly one, otherwise "".
+func defaultVilPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	matches, err := filepath.Glob(filepath.Join(home, ".config", "nm", "*.vil"))
+	if err != nil || len(matches) != 1 {
+		return ""
+	}
+	return matches[0]
+}
+
 func envOr(key, fallback string) string {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		return v
@@ -200,6 +214,8 @@ Modes
                         [{"text": "foo", attribution: "bar"}]
     -vil FILE           Load a Vial (.vil) keymap. The layout and the layer
                         required for the next character are shown while typing.
+                        If omitted, ~/.config/nm/*.vil is used when exactly one
+                        layout is installed there.
     -layernames NAMES   Comma separated layer names for -vil, e.g.
                         base,nav,media,num,sym,fun.
     -vil-split MODE     Split the Vial matrix into halves: auto, rows, cols
@@ -463,6 +479,12 @@ func main() {
 		usageError("expected at most one input file, got %d%s", len(flag.Args()), hint)
 	}
 
+	// Sensible default so the common case needs no flags: pick up a Vial
+	// layout from ~/.config/nm if one is installed there.
+	if vilPath == "" {
+		vilPath = defaultVilPath()
+	}
+
 	if vilPath == "" {
 		switch {
 		case set["layernames"] && strings.TrimSpace(layerNames) != "":
@@ -510,6 +532,11 @@ func main() {
 	}
 	if booksRaw && booksDir == "" {
 		usageError("-books-raw requires -books DIR")
+	}
+	// Book sprints run inside the chatsubo panel; imply it so -books needs
+	// no extra flag.
+	if booksDir != "" && !chatsuboMode {
+		chatsuboMode = true
 	}
 	booksSummary := booksDir != "" && !booksRaw
 
