@@ -504,6 +504,14 @@ func (t *typer) drawChatsubo() {
 		// The live speed readout tops the panel's body and is always
 		// visible, showing 0 before the first keystroke. Paint the empty
 		// box row first so the frame's side borders stay intact.
+		// Equalizer first, then the numbers beneath it; both rows are
+		// painted over blank box rows so the frame borders stay intact.
+		if rowsLeft > 1 {
+			drawBlank(row)
+			t.drawEqualizer(x+3, row, bodyCols-1, 1, t.defaultStyle)
+			row++
+			rowsLeft--
+		}
 		drawBlank(row)
 		t.drawPanelStats(x+3, row, bodyCols-1, t.curWpm, t.curCpm, t.curAcc, t.curErrs)
 		row++

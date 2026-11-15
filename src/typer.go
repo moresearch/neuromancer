@@ -25,6 +25,9 @@ const (
 // keyboard/chatsubo block.
 const layoutSplitPad = 3
 
+// statsHistoryMax caps how many WPM samples the equalizer keeps.
+const statsHistoryMax = 120
+
 type segment struct {
 	Text        string `json:"text"`
 	Attribution string `json:"attribution"`
@@ -86,6 +89,9 @@ type typer struct {
 	curAcc         float64
 	curErrs        int
 
+	// Rolling WPM history for the equalizer, oldest first.
+	wpmHistory []int
+
 	// Cyberpunk accents for the live dashboard.
 	errColor  tcell.Color
 	neonCyan  tcell.Color
@@ -138,7 +144,6 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 // The WPM figure is colour-zoned by speed and flashes on the moment the
 // reading changes, like a car HUD.
 func (t *typer) drawLiveStats(cx, y, wpm, cpm int, acc float64, errs int) {
-	t.sampleWpm(wpm)
 	segs := t.statsSegments(wpm, cpm, acc, errs, t.statsFlashOn(), true)
 
 	fieldW := 0
@@ -163,6 +168,73 @@ func (t *typer) drawLiveStats(cx, y, wpm, cpm int, acc float64, errs int) {
 		drawString(t.Scr, x, y, string(r), -1, sg.style)
 		x += len(r)
 	}
+
+	// Equalizer above the numbers.
+	t.drawEqualizer(startX, y-1, fieldW, 1, t.defaultStyle)
+}
+
+// drawEqualizer renders the rolling WPM history as a block equalizer. Bars
+// grow from the last `rows` of the sample history, scaled to the recent peak,
+// and are tinted by the same speed zones as the WPM figure.
+func (t *typer) drawEqualizer(x, y, w, rows int, style tcell.Style) {
+	if w <= 0 || rows <= 0 {
+		return
+	}
+	samples := t.wpmHistory
+	if len(samples) > w {
+		samples = samples[len(samples)-w:]
+	}
+
+	// Scale to the recent peak so the graph stays lively; keep a floor so a
+	// short burst does not blow up into a full-height wall.
+	peak := 1
+	for _, v := range samples {
+		if v > peak {
+			peak = v
+		}
+	}
+	if peak < 20 {
+		peak = 20
+	}
+
+	const blocks = "▁▂▃▄▅▆▇█"
+	nb := []rune(blocks)
+
+	startX := x + w - len(samples) // right-align: newest sample on the right
+	for i, v := range samples {
+		level := (v*len(nb)*rows + peak - 1) / peak // 1..rows*len(nb)
+		full, rem := level/len(nb), level%len(nb)
+		if rem > 0 {
+			full++
+		}
+		col := startX + i
+		color := t.neonAmber
+		switch {
+		case v >= 100:
+			color = t.neonPink
+		case v >= 70:
+			color = t.neonGreen
+		case v >= 45:
+			color = t.neonCyan
+		}
+		barStyle := t.defaultStyle.Foreground(color)
+		// Fill solid blocks from the bottom up, then a partial block on top.
+		// `full` counts the partial cell, so start one row higher for it.
+		partial := rem > 0
+		solid := full
+		if partial {
+			solid = full - 1
+		}
+		bottom := y + rows - 1
+		row := bottom
+		for i := 0; i < solid; i++ {
+			t.Scr.SetContent(col, row, nb[len(nb)-1], nil, barStyle)
+			row--
+		}
+		if partial && row >= y {
+			t.Scr.SetContent(col, row, nb[rem-1], nil, barStyle)
+		}
+	}
 }
 
 // sampleWpm records the reading a few times a second; any change arms a short
@@ -182,6 +254,15 @@ func (t *typer) sampleWpm(wpm int) {
 	}
 	t.lastWpm = wpm
 	t.lastStatsT = now
+
+	// Keep a short rolling history for the equalizer. Only advance once the
+	// timer has actually been running, so the idle 0s do not fill the graph.
+	if !t.lastStatsT.IsZero() && wpm > 0 {
+		t.wpmHistory = append(t.wpmHistory, wpm)
+		if len(t.wpmHistory) > statsHistoryMax {
+			t.wpmHistory = t.wpmHistory[len(t.wpmHistory)-statsHistoryMax:]
+		}
+	}
 }
 
 // statsFlashOn reports whether the readout is in its blink-on phase.
@@ -252,7 +333,6 @@ func (t *typer) statsSegments(wpm, cpm int, acc float64, errs int, flashOn, show
 // drawPanelStats paints the readout inside the chatsubo body on row, clipped
 // to maxCols.
 func (t *typer) drawPanelStats(x, row, maxCols, wpm, cpm int, acc float64, errs int) {
-	t.sampleWpm(wpm)
 	col := 0
 	for _, sg := range t.statsSegments(wpm, cpm, acc, errs, t.statsFlashOn(), false) {
 		for _, c := range sg.s {
@@ -420,7 +500,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			statsRows := 0
 			_, _, _, _, panelOK := t.chatPanelRect(m)
 			if !t.sprint && !(t.chatsubo != nil && panelOK) {
-				statsRows = 2 // blank spacer + live stats line
+				statsRows = 3 // blank spacer + equalizer + live stats line
 			}
 			contentH := statsRows + nr + extra + layoutSplitPad + m.height
 			if contentH <= sh {
@@ -439,9 +519,13 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 		if y < 0 {
 			y = 0
 		}
-		// Keep the stats line clear of the keyboard when space is tight.
-		if kbOK && statsY+m.height > sh {
-			statsY = sh - m.height - 1
+		// Keep the stats block (equalizer + line) clear of the keyboard and
+		// on screen when space is tight.
+		if kbOK && statsY-1+m.height > sh {
+			statsY = sh - m.height
+		}
+		if statsY < 1 {
+			statsY = 1
 		}
 	}
 
@@ -454,6 +538,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	t.lastWpm = 0
 	t.lastStatsT = time.Time{}
 	t.statsPulse = time.Time{}
+	t.wpmHistory = t.wpmHistory[:0]
 
 	if !t.BlockCursor {
 		t.tty.Write([]byte("\033[5 q"))
@@ -516,6 +601,9 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			acc = float64(ncorrect) / float64(total) * 100
 		}
 		t.curWpm, t.curCpm, t.curAcc, t.curErrs = cpm/5, cpm, acc, nerrs
+		// Sample here so the equalizer, which draws before the numbers, sees
+		// the current bucket rather than the previous frame's.
+		t.sampleWpm(t.curWpm)
 
 		// Draw the matrix and panel frame before the text so sprint text lands
 		// inside the chatsubo body instead of under its border.
