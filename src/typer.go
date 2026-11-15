@@ -39,7 +39,6 @@ type typer struct {
 	Scr              tcell.Screen
 	OnStart          func()
 	SkipWord         bool
-	ShowWpm          bool
 	DisableBackspace bool
 	BlockCursor      bool
 	tty              io.Writer
@@ -66,9 +65,33 @@ type typer struct {
 	chatsubo     *chatsubo
 	sprint       bool
 	panelLabel   string
+
+	// panelDrawn reports whether the chatsubo panel was actually painted
+	// this frame; when it is not (e.g. too narrow a terminal) the live
+	// stats fall back to the floating HUD above the text.
+	panelDrawn   bool
 	layoutTop    int
 	hintText     string
 	layerTracker *layerTracker
+
+	// Live dashboard state: WPM sampled once per frame, used to detect speed
+	// changes so the stats can flash.
+	lastWpm      int
+	lastStatsT   time.Time
+	lastStatsDir int
+	statsPulse   time.Time
+
+	// Latest live readings, shared by the floating HUD and the panel.
+	curWpm, curCpm int
+	curAcc         float64
+	curErrs        int
+
+	// Cyberpunk accents for the live dashboard.
+	errColor  tcell.Color
+	neonCyan  tcell.Color
+	neonPink  tcell.Color
+	neonGreen tcell.Color
+	neonAmber tcell.Color
 }
 
 func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
@@ -101,7 +124,144 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 		currentWordStyle:    def.Foreground(hicol2),
 		nextWordStyle:       def.Foreground(hicol3),
 		incorrectStyle:      def.Foreground(errcol),
+		errColor:            errcol,
 		incorrectSpaceStyle: def.Background(errcol),
+
+		neonCyan:  tcell.NewHexColor(0x00F0FF),
+		neonPink:  tcell.NewHexColor(0xFF2BD6),
+		neonGreen: tcell.NewHexColor(0x39FF14),
+		neonAmber: tcell.NewHexColor(0xFFB000),
+	}
+}
+
+// drawLiveStats renders the cyberpunk speed readout centered on cx at row y.
+// The WPM figure is colour-zoned by speed and flashes on the moment the
+// reading changes, like a car HUD.
+func (t *typer) drawLiveStats(cx, y, wpm, cpm int, acc float64, errs int) {
+	t.sampleWpm(wpm)
+	segs := t.statsSegments(wpm, cpm, acc, errs, t.statsFlashOn(), true)
+
+	fieldW := 0
+	for _, sg := range segs {
+		fieldW += len([]rune(sg.s))
+	}
+	startX := cx - fieldW/2
+
+	// Wipe the whole band (a little wider than the content) first: cx can
+	// shift between frames and a wide rune leaves a trailing cell behind.
+	for bx := startX - 1; bx <= startX+fieldW; bx++ {
+		t.Scr.SetContent(bx, y, ' ', nil, t.defaultStyle)
+	}
+
+	x := startX
+	for _, sg := range segs {
+		r := []rune(sg.s)
+		remaining := fieldW - (x - startX)
+		if len(r) > remaining {
+			r = r[:remaining]
+		}
+		drawString(t.Scr, x, y, string(r), -1, sg.style)
+		x += len(r)
+	}
+}
+
+// sampleWpm records the reading a few times a second; any change arms a short
+// flash. Sampling (rather than per-frame) keeps the average drifting from
+// retriggering the flash constantly.
+func (t *typer) sampleWpm(wpm int) {
+	now := time.Now()
+	if !t.lastStatsT.IsZero() && now.Sub(t.lastStatsT) < 250*time.Millisecond {
+		return
+	}
+	if t.lastWpm != 0 && wpm != t.lastWpm {
+		t.statsPulse = now
+		t.lastStatsDir = 1
+		if wpm < t.lastWpm {
+			t.lastStatsDir = -1
+		}
+	}
+	t.lastWpm = wpm
+	t.lastStatsT = now
+}
+
+// statsFlashOn reports whether the readout is in its blink-on phase.
+func (t *typer) statsFlashOn() bool {
+	if t.statsPulse.IsZero() || time.Since(t.statsPulse) >= 450*time.Millisecond {
+		return false
+	}
+	return int(time.Now().UnixMilli()/140)%2 == 0
+}
+
+// statsSeg is one styled chunk of the speed readout.
+type statsSeg struct {
+	s     string
+	style tcell.Style
+}
+
+// statsSegments builds the colour-zoned readout: WPM (tinted by speed, and
+// flashing when flashOn), then CPM, accuracy and errors in neon accents.
+// The panel is narrower than the standalone HUD, so showCPM drops the CPM
+// figure there rather than clipping a more useful one.
+func (t *typer) statsSegments(wpm, cpm int, acc float64, errs int, flashOn, showCPM bool) []statsSeg {
+	wpmColor, arrow := t.neonCyan, "▸"
+	switch {
+	case wpm >= 100:
+		wpmColor, arrow = t.neonPink, "◆"
+	case wpm >= 70:
+		wpmColor, arrow = t.neonGreen, "▴"
+	case wpm >= 45:
+		wpmColor, arrow = t.neonCyan, "▸"
+	default:
+		wpmColor, arrow = t.neonAmber, "▾"
+	}
+
+	accColor := t.neonGreen
+	if acc < 98 {
+		accColor = t.neonAmber
+	}
+
+	wpmStyle := t.defaultStyle.Foreground(wpmColor).Bold(true)
+	if flashOn {
+		// Flash the speed figure itself: white-hot on a jump up, errcol on a
+		// drop, so a change reads instantly without disturbing the rest.
+		if t.lastStatsDir < 0 {
+			wpmStyle = t.defaultStyle.Foreground(t.errColor).Bold(true)
+		} else {
+			wpmStyle = t.defaultStyle.Foreground(tcell.ColorWhite).Reverse(true).Bold(true)
+		}
+	}
+
+	sep := t.defaultStyle.Foreground(t.neonPink)
+	segs := []statsSeg{
+		{fmt.Sprintf("%s %d WPM", arrow, wpm), wpmStyle},
+		{" · ", sep},
+	}
+	if showCPM {
+		segs = append(segs,
+			statsSeg{fmt.Sprintf("%d CPM", cpm), sep},
+			statsSeg{" · ", sep},
+		)
+	}
+	return append(segs,
+		statsSeg{fmt.Sprintf("%.0f%%", acc), t.defaultStyle.Foreground(accColor).Bold(true)},
+		statsSeg{" · ", sep},
+		statsSeg{fmt.Sprintf("%d ERR", errs), t.defaultStyle.Foreground(t.neonAmber)},
+	)
+}
+
+// drawPanelStats paints the readout inside the chatsubo body on row, clipped
+// to maxCols.
+func (t *typer) drawPanelStats(x, row, maxCols, wpm, cpm int, acc float64, errs int) {
+	t.sampleWpm(wpm)
+	col := 0
+	for _, sg := range t.statsSegments(wpm, cpm, acc, errs, t.statsFlashOn(), false) {
+		for _, c := range sg.s {
+			if col >= maxCols {
+				return
+			}
+			t.Scr.SetContent(x+col, row, c, nil, sg.style)
+			col++
+		}
 	}
 }
 
@@ -200,6 +360,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	nc := textW
 	x := 0
 	y := (sh - nr) / 2
+	statsY := y - 2
 	placed := false
 
 	if t.sprint && kbOK {
@@ -254,12 +415,21 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			if timeLimit != -1 {
 				extra++
 			}
-			contentH := nr + extra + layoutSplitPad + m.height
+			// Reserve room for the floating HUD unless the chatsubo panel
+			// will carry the stats instead.
+			statsRows := 0
+			_, _, _, _, panelOK := t.chatPanelRect(m)
+			if !t.sprint && !(t.chatsubo != nil && panelOK) {
+				statsRows = 2 // blank spacer + live stats line
+			}
+			contentH := statsRows + nr + extra + layoutSplitPad + m.height
 			if contentH <= sh {
-				y = (sh - contentH) / 2
+				y = (sh-contentH)/2 + statsRows
+				statsY = y - 2
 				t.layoutTop = y + nr + extra + layoutSplitPad
 			} else {
 				y = 0
+				statsY = nr + 1
 				t.layoutTop = sh - m.height
 				if t.layoutTop < nr+extra+layoutSplitPad {
 					t.layoutTop = nr + extra + layoutSplitPad
@@ -269,6 +439,10 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 		if y < 0 {
 			y = 0
 		}
+		// Keep the stats line clear of the keyboard when space is tight.
+		if kbOK && statsY+m.height > sh {
+			statsY = sh - m.height - 1
+		}
 	}
 
 	if t.chatsubo != nil {
@@ -277,6 +451,9 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 	t.wrongKey = 0
 	t.wrongUntil = time.Time{}
+	t.lastWpm = 0
+	t.lastStatsT = time.Time{}
+	t.statsPulse = time.Time{}
 
 	if !t.BlockCursor {
 		t.tty.Write([]byte("\033[5 q"))
@@ -326,6 +503,19 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 				t.panelLabel = fmt.Sprintf(" chatsubo %ds ", secs)
 			}
 		}
+
+		// Compute live stats up front so the panel and the HUD share them.
+		calcStats()
+		total := ncorrect + nerrs
+		cpm := 0
+		acc := 100.0
+		if duration > 1e7 { //Avoid flashing large numbers on test start.
+			cpm = int(float64(ncorrect) / (float64(duration) / 60e9))
+		}
+		if total > 0 {
+			acc = float64(ncorrect) / float64(total) * 100
+		}
+		t.curWpm, t.curCpm, t.curAcc, t.curErrs = cpm/5, cpm, acc, nerrs
 
 		// Draw the matrix and panel frame before the text so sprint text lands
 		// inside the chatsubo body instead of under its border.
@@ -399,12 +589,9 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 				drawString(t.Scr, x+nc/2, y+nr+ah+1, strconv.Itoa(int(remaining/1e9)+1), -1, t.defaultStyle)
 			}
 
-			if t.ShowWpm && !startTime.IsZero() {
-				calcStats()
-				if duration > 1e7 { //Avoid flashing large numbers on test start.
-					wpm := int((float64(ncorrect) / 5) / (float64(duration) / 60e9))
-					drawString(t.Scr, x+nc/2-4, y-2, fmt.Sprintf("WPM: %-10d\n", wpm), -1, t.defaultStyle)
-				}
+			// Show the HUD unless the panel is carrying the stats.
+			if !t.panelDrawn {
+				t.drawLiveStats(x+nc/2, statsY, t.curWpm, t.curCpm, t.curAcc, t.curErrs)
 			}
 		}
 

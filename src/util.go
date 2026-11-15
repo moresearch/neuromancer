@@ -146,22 +146,24 @@ func randomText(n int, words []string) string {
 
 func drawString(scr tcell.Screen, x, y int, s string, cursorIdx int, style tcell.Style) {
 	sx := x
+	ci := 0 // rune index, so cursorIdx is independent of multibyte chars
 
-	for i, c := range s {
+	for _, c := range s {
 		if c == '\n' {
 			y++
 			x = sx
 		} else {
 			scr.SetContent(x, y, c, nil, style)
-			if i == cursorIdx {
+			if ci == cursorIdx {
 				scr.ShowCursor(x, y)
 			}
 
 			x++
 		}
+		ci++
 	}
 
-	if cursorIdx == len(s) {
+	if cursorIdx == ci {
 		scr.ShowCursor(x, y)
 	}
 }

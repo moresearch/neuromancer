@@ -112,9 +112,12 @@ usage: nm \[OPTION\]... \[FILE\]
 
 ## Aesthetics
 
--showwpm
+Live stats
 
-: Display WPM whilst typing.
+: A live WPM, accuracy and error-count readout is always shown (displaying 0
+  before you start). With `-chatsubo` it sits on top of the panel; otherwise it
+  appears above the text. The speed figure is colour-zoned and flashes whenever
+  the reading changes.
 
 -theme *THEMEFILE*
 

@@ -433,6 +433,7 @@ func (t *typer) showSprintMessage(msg string) {
 }
 
 func (t *typer) drawChatsubo() {
+	t.panelDrawn = false
 	if t.Scr == nil {
 		return
 	}
@@ -448,6 +449,7 @@ func (t *typer) drawChatsubo() {
 	if !ok {
 		return
 	}
+	t.panelDrawn = true
 	if t.sprint {
 		t.drawSprintPanel(x, y, width, height)
 		return
@@ -495,12 +497,20 @@ func (t *typer) drawChatsubo() {
 	}
 
 	row := y + 1
-	if topPad > 0 {
+	rowsLeft := contentRows
+	if rowsLeft > 0 {
+		// The live speed readout tops the panel's body and is always
+		// visible, showing 0 before the first keystroke. Paint the empty
+		// box row first so the frame's side borders stay intact.
+		drawBlank(row)
+		t.drawPanelStats(x+3, row, bodyCols-1, t.curWpm, t.curCpm, t.curAcc, t.curErrs)
+		row++
+		rowsLeft--
+	} else if topPad > 0 {
 		drawBlank(row)
 		row++
 	}
 
-	rowsLeft := contentRows
 	guidance := strings.Join(strings.Fields(t.hintText), " ")
 	if guidance != "" && rowsLeft > 0 {
 		drawBoxLine(row, chatsuboClipRunes(guidance, bodyCols), guideStyle)

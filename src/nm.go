@@ -238,7 +238,10 @@ File Mode
                         reset progress on a given file.
 
 Aesthetics
-    -showwpm            Display WPM whilst typing.
+    A live WPM/accuracy/errors readout is always shown. It sits on top of the
+    chatsubo panel when that is enabled, otherwise above the text, and the
+    speed figure flashes when the reading changes.
+
     -theme THEMEFILE    The theme to use.
     -w N                The maximum line length in characters (default: fit
                         the keyboard width). Ignored if -raw is present.
@@ -345,7 +348,6 @@ func main() {
 	var ollamaModel string
 
 	var themeName string
-	var showWpm bool
 	var drillMode bool
 	var hrmMode bool
 	var layerTrackEnabled bool
@@ -380,7 +382,6 @@ func main() {
 	flag.StringVar(&ollamaURL, "ollama", normalizeOllamaURL(envOr("OLLAMA_HOST", defaultOllamaURL)), "")
 	flag.StringVar(&ollamaModel, "model", envOr("OLLAMA_MODEL", ""), "")
 
-	flag.BoolVar(&showWpm, "showwpm", false, "")
 	flag.BoolVar(&layerTrackEnabled, "layer-track", true, "")
 	flag.BoolVar(&drillMode, "drill", false, "")
 	flag.BoolVar(&hrmMode, "hrm", false, "")
@@ -657,7 +658,6 @@ func main() {
 	typer.SkipWord = !noSkip
 	typer.DisableBackspace = noBackspace
 	typer.BlockCursor = normalCursor
-	typer.ShowWpm = showWpm
 	typer.vil = vilKB
 	if vilKB != nil && layerTrackEnabled && layerTrackingSupported() {
 		if tracker, err := startLayerTracker(scr, vilKB); err != nil {

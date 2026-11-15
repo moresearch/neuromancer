@@ -380,13 +380,12 @@ Options:
 ```bash
 nm -theme gruvbox
 nm -notheme
-nm -showwpm
 nm -bold
 nm -blockcursor
 nm -w 72
 nm -noskip
 nm -nobackspace
-nm -showwpm -t 60
+nm -t 60
 nm -nohighlight
 nm -highlight1
 nm -highlight2
@@ -395,7 +394,6 @@ nm -highlightchars 3
 
 - `-theme FILE` selects a built-in or `~/.nm/themes/FILE` theme.
 - `-notheme` uses terminal colors.
-- `-showwpm` displays live WPM.
 - `-bold` emboldens typed text.
 - `-w N` wraps practice text to N columns (default: fit the full keyboard width; `-raw` ignores it).
 - `-noskip` disables automatic word skipping on Space.
@@ -409,8 +407,11 @@ nm -highlightchars 3
 
 ![next three characters highlighted with -highlightchars 3](docs/chars3.png)
 
-With `-showwpm` the live score appears above the text and the timed run counts
-down below it:
+A bold live `WPM · CPM · ACC · ERR` readout is always on screen, showing 0 before you start. With `-chatsubo` it rides on top of the
+panel; otherwise it appears above the text (below it on short terminals). The
+speed figure is colour-zoned by pace and flashes when your speed changes, so
+a burst or a slump is visible at a glance. The timed run counts down below the
+text:
 
 ![live WPM while typing](docs/wpm.png)
 
