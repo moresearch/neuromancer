@@ -449,11 +449,13 @@ func (t *typer) drawChatsubo() {
 	if !ok {
 		return
 	}
-	t.panelDrawn = true
 	if t.sprint {
+		// The sprint panel holds the practice text, not the stats, so leave
+		// panelDrawn false to keep the HUD on screen above it.
 		t.drawSprintPanel(x, y, width, height)
 		return
 	}
+	t.panelDrawn = true
 
 	contentRows := height - 2
 	topPad, bottomPad := 0, 0
