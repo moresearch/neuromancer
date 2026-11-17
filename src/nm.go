@@ -328,7 +328,9 @@ func saveMistakes(mistakes []mistake) {
 	}
 
 	db = append(db, mistakes...)
-	writeValue(MISTAKE_DB, db)
+	if err := writeValue(MISTAKE_DB, db); err != nil {
+		warnf("could not save mistakes: %v", err)
+	}
 }
 
 func main() {
@@ -686,6 +688,11 @@ func main() {
 	typer.DisableBackspace = noBackspace
 	typer.BlockCursor = normalCursor
 	typer.vil = vilKB
+	// Keep the last/best figures per mode; report mode has nothing to rank.
+	if !noReport && !typer.sprint {
+		typer.scorePath = SCORE_DB
+		typer.scoreKey = scoreMode(timeout, n)
+	}
 	if vilKB != nil && layerTrackEnabled && layerTrackingSupported() {
 		if tracker, err := startLayerTracker(scr, vilKB); err != nil {
 			warnf("physical layer tracking unavailable: %v", err)

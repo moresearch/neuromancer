@@ -120,6 +120,17 @@ Live stats
   appears above the text. The speed figure is colour-zoned and flashes whenever
   the reading changes.
 
+: The readout ends with **LAST** and **BEST**, for example
+  `▸ 62 WPM · 310 CPM · 97% · 1 ERR · LAST 79%95 · BEST 91%98`. **LAST** is the
+  previous completed test (a test left with **esc** or an arrow key does not
+  count). **BEST** is the highest WPM completed; it rises during a run as soon
+  as that run passes it, and its digits invert while the run is at or above it.
+  Both are recorded per mode, so **-t 60** and **-n 50** keep separate records,
+  and they persist in `~/.local/share/nm/.scores` across runs. On the narrow
+  Chatsubo panel **CPM** and then **ERR** are dropped to keep both figures on
+  screen. Scores are not recorded with **-noreport** or in **-books** sprint
+  mode.
+
 -theme *THEMEFILE*
 
 : The theme to use. 
@@ -454,6 +465,76 @@ Boolean flags such as **-chatsubo** do not take a value. Use
 **-chatsubo-every DURATION** to change the interval:
 ```
 nm -chatsubo -chatsubo-every 30s
+```
+
+## Copy/paste blocks
+
+Each block is meant to be pasted as-is. Set VIL once and every later block
+works unchanged (or leave it unset to use the built-in Colemak-DH matrix):
+```
+VIL=~/keyboards/sofle.vil
+```
+
+Ordinary practice:
+```
+nm
+nm -t 30
+nm -quotes en
+nm -words 200en -n 25 -g 4
+```
+
+Your own text. Flags go before the file:
+```
+nm notes.txt
+nm -t 60 notes.txt
+nm -start 0 notes.txt
+nm -multi notes.txt
+cat notes.txt | nm
+```
+
+Vial layout and drills:
+```
+nm -vil "$VIL" -vil-info
+nm -vil "$VIL" -layernames base,mouse,num,fn,shift,ctrl
+nm -vil "$VIL" -drill
+nm -vil "$VIL" -hrm
+nm -vil "$VIL" -layer-track=false
+```
+
+Books and Ollama:
+```
+nm -vil "$VIL" -books ./books
+nm -vil "$VIL" -books ./books -books-raw
+nm -model qwen3:0.6b -gen "home row words"
+nm -vil "$VIL" -model qwen3:0.6b -gen "sym layer, avoid numbers"
+```
+
+Live Chatsubo coaching:
+```
+nm -vil "$VIL" -layernames base,mouse,num,fn,shift,ctrl \
+    -chatsubo -chatsubo-every 1m -model qwen3.5:0.8b
+```
+
+Training aids:
+```
+nm -highlightchars 3
+nm -noskip
+nm -nobackspace
+nm -theme gruvbox
+```
+
+Piping results into other tools:
+```
+nm -oneshot -noreport -t 60
+nm -csv -oneshot >> ~/wpm.csv
+nm -json -oneshot | jq '.[].wpm'
+shuf -n 40 /usr/share/dict/words | nm
+```
+
+Inspect the recorded LAST/BEST scores. They are kept per mode, so **-t 60**
+and **-n 50** do not share a record:
+```
+cat ~/.local/share/nm/.scores | jq .
 ```
 
 # PATHS

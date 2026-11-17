@@ -9,6 +9,7 @@ import (
 
 var FILE_STATE_DB string
 var MISTAKE_DB string
+var SCORE_DB string
 
 func init() {
 	var ok bool
@@ -29,6 +30,7 @@ func init() {
 
 	FILE_STATE_DB = filepath.Join(data, ".db")
 	MISTAKE_DB = filepath.Join(data, ".errors")
+	SCORE_DB = filepath.Join(data, ".scores")
 }
 
 func readValue(path string, o interface{}) error {
@@ -41,14 +43,11 @@ func readValue(path string, o interface{}) error {
 	return json.Unmarshal(b, o)
 }
 
-func writeValue(path string, o interface{}) {
+func writeValue(path string, o interface{}) error {
 	b, err := json.Marshal(o)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
-	err = ioutil.WriteFile(path, b, 0600)
-	if err != nil {
-		panic(err)
-	}
+	return ioutil.WriteFile(path, b, 0600)
 }

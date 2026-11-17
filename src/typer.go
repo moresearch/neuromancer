@@ -89,6 +89,14 @@ type typer struct {
 	curAcc         float64
 	curErrs        int
 
+	// Prior results for the current mode, loaded at test start. bestWpm
+	// tracks the live reading so a PB shows up the moment it is beaten.
+	scorePath string
+	scoreKey  string
+	lastScore scoreRecord
+	bestWpm   int
+	bestAcc   float64
+
 	// Rolling WPM history for the equalizer, oldest first.
 	wpmHistory []int
 
@@ -144,8 +152,7 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 // The WPM figure is colour-zoned by speed and flashes on the moment the
 // reading changes, like a car HUD.
 func (t *typer) drawLiveStats(cx, y, wpm, cpm int, acc float64, errs int) {
-	segs := t.statsSegments(wpm, cpm, acc, errs, t.statsFlashOn(), true)
-
+	segs := t.statsSegments(wpm, cpm, acc, errs, t.statsFlashOn(), true, true)
 	fieldW := 0
 	for _, sg := range segs {
 		fieldW += len([]rune(sg.s))
@@ -280,10 +287,10 @@ type statsSeg struct {
 }
 
 // statsSegments builds the colour-zoned readout: WPM (tinted by speed, and
-// flashing when flashOn), then CPM, accuracy and errors in neon accents.
-// The panel is narrower than the standalone HUD, so showCPM drops the CPM
-// figure there rather than clipping a more useful one.
-func (t *typer) statsSegments(wpm, cpm int, acc float64, errs int, flashOn, showCPM bool) []statsSeg {
+// flashing when flashOn), then CPM, accuracy, errors and the last/best score
+// in neon accents. The panel is narrower than the standalone HUD, so showCPM
+// drops the CPM figure there and keeps the score figures instead.
+func (t *typer) statsSegments(wpm, cpm int, acc float64, errs int, flashOn, showCPM, showErrs bool) []statsSeg {
 	wpmColor, arrow := t.neonCyan, "▸"
 	switch {
 	case wpm >= 100:
@@ -323,26 +330,84 @@ func (t *typer) statsSegments(wpm, cpm int, acc float64, errs int, flashOn, show
 			statsSeg{" · ", sep},
 		)
 	}
-	return append(segs,
+	segs = append(segs,
 		statsSeg{fmt.Sprintf("%.0f%%", acc), t.defaultStyle.Foreground(accColor).Bold(true)},
 		statsSeg{" · ", sep},
-		statsSeg{fmt.Sprintf("%d ERR", errs), t.defaultStyle.Foreground(t.neonAmber)},
 	)
+	if showErrs {
+		segs = append(segs,
+			statsSeg{fmt.Sprintf("%d ERR", errs), t.defaultStyle.Foreground(t.neonAmber)},
+		)
+	}
+	return append(segs, t.scoreSegments()...)
+}
+
+// scoreSegments renders the last and best score. Best is relative to the WPM
+// being beaten, so it updates mid-test and pops white-hot on a new record.
+func (t *typer) scoreSegments() []statsSeg {
+	labelStyle := t.defaultStyle.Foreground(t.neonPink)
+	valueStyle := t.defaultStyle.Foreground(t.neonGreen).Bold(true)
+	bestStyle := valueStyle
+	if t.curWpm > 0 && t.curWpm >= t.bestWpm {
+		bestStyle = t.defaultStyle.Foreground(tcell.ColorWhite).Reverse(true).Bold(true)
+	}
+
+	best := "—"
+	if t.bestWpm > 0 {
+		best = fmt.Sprintf("%d%%%.0f", t.bestWpm, t.bestAcc)
+	}
+	return []statsSeg{
+		{" · ", labelStyle},
+		{"LAST ", labelStyle},
+		{fmt.Sprintf("%d%%%.0f", t.lastScore.LastWpm, t.lastScore.LastAcc), valueStyle},
+		{" · ", labelStyle},
+		{"BEST ", labelStyle},
+		{best, bestStyle},
+	}
+}
+
+// saveScore commits a finished test to the stored last/best. Tests ended
+// early (escape, arrows, ctrl-c) return before this, so a partial run never
+// overwrites a real score.
+func (t *typer) saveScore() {
+	if t.scorePath == "" {
+		return
+	}
+	t.lastScore = recordScore(t.scorePath, t.scoreKey, t.curWpm, t.curAcc)
+	t.bestWpm, t.bestAcc = t.lastScore.BestWpm, t.lastScore.BestAcc
 }
 
 // drawPanelStats paints the readout inside the chatsubo body on row, clipped
-// to maxCols.
+// to maxCols. If it still does not fit, it retries without the CPM figure and
+// then without the error count so LAST/BEST stay visible.
 func (t *typer) drawPanelStats(x, row, maxCols, wpm, cpm int, acc float64, errs int) {
+	variants := []struct {
+		showCPM, showErrs bool
+	}{{false, true}, {false, false}}
+	for _, v := range variants {
+		if t.paintPanelStats(x, row, maxCols, t.statsSegments(wpm, cpm, acc, errs, t.statsFlashOn(), v.showCPM, v.showErrs)) {
+			return
+		}
+	}
+}
+
+// paintPanelStats draws segs and reports whether they fit in maxCols.
+func (t *typer) paintPanelStats(x, row, maxCols int, segs []statsSeg) bool {
+	w := 0
+	for _, sg := range segs {
+		w += len([]rune(sg.s))
+	}
+	if w > maxCols {
+		return false
+	}
 	col := 0
-	for _, sg := range t.statsSegments(wpm, cpm, acc, errs, t.statsFlashOn(), false) {
+	for _, sg := range segs {
 		for _, c := range sg.s {
-			if col >= maxCols {
-				return
-			}
 			t.Scr.SetContent(x+col, row, c, nil, sg.style)
 			col++
 		}
 	}
+	return true
 }
 
 func (t *typer) Start(text []segment, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, rc int, mistakes []mistake) {
@@ -540,6 +605,13 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	t.statsPulse = time.Time{}
 	t.wpmHistory = t.wpmHistory[:0]
 
+	// Prior results for this mode ride along in the readout so the current
+	// test is always measured against the last and best one.
+	if t.scorePath != "" {
+		t.lastScore = loadScore(t.scorePath, t.scoreKey)
+		t.bestWpm, t.bestAcc = t.lastScore.BestWpm, t.lastScore.BestAcc
+	}
+
 	if !t.BlockCursor {
 		t.tty.Write([]byte("\033[5 q"))
 
@@ -601,6 +673,11 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			acc = float64(ncorrect) / float64(total) * 100
 		}
 		t.curWpm, t.curCpm, t.curAcc, t.curErrs = cpm/5, cpm, acc, nerrs
+		// Show a live PB the instant it is beaten, so the BEST figure is
+		// never stale while the test is still going.
+		if t.bestWpm == 0 || t.curWpm > t.bestWpm {
+			t.bestWpm, t.bestAcc = t.curWpm, t.curAcc
+		}
 		// Sample here so the equalizer, which draws before the numbers, sees
 		// the current bucket rather than the previous frame's.
 		t.sampleWpm(t.curWpm)
@@ -863,12 +940,14 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 				if idx == len(text) {
 					calcStats()
+					t.saveScore()
 					return
 				}
 			}
 		default: //tick
 			if timeLimit != -1 && !startTime.IsZero() && timeLimit <= time.Now().Sub(startTime) {
 				calcStats()
+				t.saveScore()
 				return
 			}
 

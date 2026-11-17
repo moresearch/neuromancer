@@ -138,6 +138,83 @@ nm -json -oneshot > result.json     # write JSON results
 nm -list themes                     # list built-in themes
 ```
 
+## Copy/paste examples
+
+Each block below is meant to be pasted as-is. Set `VIL` once in your shell and
+every later block works unchanged:
+
+```bash
+# 1. Point this at your layout, or skip it to use the built-in Colemak-DH matrix.
+VIL=~/keyboards/sofle.vil
+```
+
+```bash
+# 2. Ordinary practice: 50 words, then a 30s test, then quotes.
+nm
+nm -t 30
+nm -quotes en
+```
+
+```bash
+# 3. Word lists by name. `-n` is words per group, `-g` the group count.
+nm -words 200en -n 25 -g 4
+nm -words fr -n 50
+```
+
+```bash
+# 4. Your own text. Flags go before the file.
+nm notes.txt
+nm -t 60 notes.txt
+nm -start 0 notes.txt        # reset saved progress for this file
+nm -multi notes.txt          # one test per paragraph
+cat notes.txt | nm           # same text from stdin
+```
+
+```bash
+# 5. Vial layout, with layer guidance and layer drills.
+nm -vil "$VIL" -vil-info
+nm -vil "$VIL" -layernames base,mouse,num,fn,shift,ctrl
+nm -vil "$VIL" -drill
+nm -vil "$VIL" -hrm
+nm -vil "$VIL" -layer-track=false     # if raw HID is not available
+```
+
+```bash
+# 6. Books, and Ollama drills.
+nm -vil "$VIL" -books ./books
+nm -vil "$VIL" -books ./books -books-raw
+nm -model qwen3:0.6b -gen "home row words"
+nm -vil "$VIL" -model qwen3:0.6b -gen "sym layer, avoid numbers"
+```
+
+```bash
+# 7. Live Chatsubo coaching in the panel between the keyboard halves.
+nm -vil "$VIL" -layernames base,mouse,num,fn,shift,ctrl \
+  -chatsubo -chatsubo-every 1m -model qwen3.5:0.8b
+```
+
+```bash
+# 8. Training aids for a specific habit.
+nm -highlightchars 3         # look only 3 characters ahead
+nm -noskip                   # must type every word, no Space to skip
+nm -nobackspace              # mistakes cannot be erased
+nm -theme gruvbox            # or: nm -list themes
+```
+
+```bash
+# 9. Feed a session's results into a shell pipeline.
+nm -oneshot -noreport -t 60          # fastest possible: no report, exit
+nm -csv  -oneshot >> ~/wpm.csv       # columns: test,wpm,cpm,accuracy,timestamp
+nm -json -oneshot | jq '.[].wpm'     # array of result objects
+shuf -n 40 /usr/share/dict/words | nm # random dictionary words
+```
+
+```bash
+# 10. Inspect the scores those runs record. LAST and BEST are kept per mode,
+#     so `-t 60` and `-n 50` do not share a record.
+cat ~/.local/share/nm/.scores | jq .
+```
+
 ## Keyboard controls
 
 | Key | Action |
@@ -414,6 +491,19 @@ a burst or a slump is visible at a glance. The timed run counts down below the
 text:
 
 ![live WPM while typing](docs/wpm.png)
+
+The readout ends with `LAST` and `BEST`, e.g. `▸ 62 WPM · 310 CPM · 97% · 1 ERR · LAST 79%95 · BEST 91%98`:
+
+- `LAST` is your previous completed test. A test you leave with `Esc` or an
+  arrow key does not count.
+- `BEST` is the highest WPM you have completed. It climbs while you type as
+  soon as the current run passes it, and its digits invert while you are at or
+  above it. It shows `—` until you finish a test.
+- Both are kept per mode, so `-t 60` and `-n 50` keep separate records, and
+  they persist across runs in `~/.local/share/nm/.scores`.
+- On the narrow Chatsubo panel, `CPM` (then `ERR`) is dropped to make room, so
+  `LAST` and `BEST` always stay visible.
+- The scores are not recorded with `-noreport` or in `-books` sprint mode.
 
 At the end of a run `nm` shows a report:
 
