@@ -1,8 +1,8 @@
 # Unreleased:
  - The keyboard matrix now draws blank home-column gaps: on each split half the
-   four home columns (`arst` / `oien`) form a block with one extra cell on each
-   side, so only that block stands apart and every other column keeps the
-   normal spacing. Thumb keys move onto their own row, indented inward from the
+   four columns nearest the middle (`arst` / `neio`) form a block with one
+   extra cell on each side, so only that block stands apart and every other
+   column keeps the normal spacing. Thumb keys move onto their own row, indented inward from the
    outer edge, and the space bars span the home block. Keys keep their size and
    the matrix width (and therefore text wrapping) accounts for the gaps.
    Terminals too narrow for the split layout draw the whole keyboard as one

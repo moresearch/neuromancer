@@ -24,9 +24,9 @@ usage: nm \[OPTION\]... \[FILE\]
   While a test is running the Colemak-DH (matrix) layout is shown at the bottom
   of the screen. The key producing the next character is highlighted in green.
   Pressing the wrong key highlights that key's location in red. In each split
-  half the four home columns (`arst` and `oien`) form a separate block with a
-  blank cell on either side, so a reach away from the home columns is visible
-  at a glance.
+  half the four columns nearest the middle (`arst` on the left, `neio` on the
+  right) form a block with a blank cell on either side, so a reach away from
+  the home columns is visible at a glance.
 
 # OPTIONS
 
@@ -299,14 +299,14 @@ are determined exclusively by the input.
   and leaves padding below the keyboard. Terminal font size itself is
   controlled by your terminal emulator.
 
-  Within each half the four home columns (`arst` on the left, `oien` on the
-  right) form a contiguous block with one extra blank cell on each side. Only
-  that block stands apart; every other column (the outer index columns such as
-  `q`/`p`, the jutting `;'[]\` tail) keeps the normal spacing. The thumb keys
-  sit on their own row, indented inward from the outer edge, and the space bar
-  spans the home block, so the thumbs line up under the home fingers. On a
-  terminal too narrow for the split layout the whole keyboard is drawn as one
-  block instead of shrinking every keycap.
+  Within each half the four columns nearest the middle form a contiguous block
+  with one extra blank cell on each side: `a r s t` on the left half and
+  `n e i o` on the right. Every other column keeps the normal spacing; on
+  halves with extra columns (`q`/`p`, the jutting `;'[]\` tail) those sit
+  outside the block. The thumb keys sit on their own row, indented inward from
+  the outer edge, and the space bar spans the home block, so the thumbs line up
+  under the home fingers. On a terminal too narrow for the split layout the
+  whole keyboard is drawn as one block instead of shrinking every keycap.
 
   Use **-drill** to generate a test from the characters which require a
   non-base layer. Any text file can also be used as a lesson:

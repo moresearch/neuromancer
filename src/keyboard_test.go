@@ -338,27 +338,20 @@ func TestBuiltinHomeGap(t *testing.T) {
 		t.Errorf("left home columns are not contiguous")
 	}
 
-	// Right half, upper row: j l are the outer columns, then the gap, then the
-	// four home columns u y ; [.
-	if keyX('l')-keyX('j') != step {
-		t.Errorf("right outer columns are not contiguous")
+	// Right half, upper row: j l u y sit at the inner edge, then the gap, then
+	// the outer columns ; [ ] \.
+	if keyX('l')-keyX('j') != step || keyX('u')-keyX('l') != step || keyX('y')-keyX('u') != step {
+		t.Errorf("right inner columns are not contiguous")
 	}
-	if gap := keyX('u') - keyX('l'); gap != step+cell {
-		t.Errorf("right gap after l: %d, want %d", gap, step+cell)
+	if gap := keyX(';') - keyX('y'); gap != step+cell {
+		t.Errorf("right gap after y: %d, want %d", gap, step+cell)
 	}
-	if keyX('y')-keyX('u') != step || keyX(';')-keyX('y') != step {
+	// Right half, home row: m n e i are the home block; o ' sit outside it.
+	if keyX('e')-keyX('n') != step || keyX('i')-keyX('e') != step {
 		t.Errorf("right home columns are not contiguous")
 	}
-	// Right half, home row: m n are outside the block, then the gap, then
-	// e i o '. The gap sits between n and e.
-	if keyX('n')-keyX('m') != step {
-		t.Errorf("right home row outer columns are not contiguous")
-	}
-	if gap := keyX('e') - keyX('n'); gap != step+cell {
-		t.Errorf("right gap after n: %d, want %d", gap, step+cell)
-	}
-	if keyX('i')-keyX('e') != step || keyX('o')-keyX('i') != step {
-		t.Errorf("right home columns are not contiguous")
+	if gap := keyX('o') - keyX('i'); gap != step+cell {
+		t.Errorf("right gap after i: %d, want %d", gap, step+cell)
 	}
 }
 

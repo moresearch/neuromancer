@@ -442,13 +442,17 @@ func kbSplitMaxOffset(keyWidth int) int {
 // is keyWidth+keyGap wide, i.e. one extra column step.
 const homeGapCells = 1
 
-// homeBlockStart is the index of a half's first home column: the four home
-// columns sit in the middle of the half, with any extra columns outside them.
+// homeBlockStart is the index of a half's first home column. The home keys
+// (a r s t / n e i o) are the four keys nearest the middle of each half, so
+// any extra column sits on the far side of the gap.
 func homeBlockStart(halfCols int) int {
 	if halfCols <= 4 {
 		return 0
 	}
-	return (halfCols + 1 - 4) / 2
+	if halfCols-4 < 2 {
+		return 1
+	}
+	return halfCols - 4
 }
 
 // homeColX returns the x offset of column col relative to its half's origin,
@@ -458,17 +462,16 @@ func homeColX(halfCols, col, keyWidth, keyGap int) int {
 		return 0
 	}
 	start := homeBlockStart(halfCols)
-	gap := homeGapCells * (keyWidth + keyGap)
 	if halfCols <= 4 {
 		return col * (keyWidth + keyGap)
 	}
 	// The home block is an island: a blank cell on each side of it.
 	x := col * (keyWidth + keyGap)
 	if col >= start {
-		x += gap
+		x += homeGapCells * (keyWidth + keyGap)
 	}
 	if col >= start+4 {
-		x += gap
+		x += homeGapCells * (keyWidth + keyGap)
 	}
 	return x
 }
