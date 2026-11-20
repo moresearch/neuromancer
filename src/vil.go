@@ -1531,13 +1531,9 @@ func (kb *vilKeyboard) metrics(screenWidth, screenHeight, splitGap int) (kbMetri
 	if keyWidth == 0 {
 		return kbMetrics{}, false
 	}
+	// Keys are packed tight; the home cluster's gap is what sets those columns
+	// apart, so spare width is not spent widening every column.
 	keyGap := 0
-	for g := kbMaxKeyGap; g > 0; g-- {
-		if kb.width(keyWidth, g, splitGap)+2 <= screenWidth {
-			keyGap = g
-			break
-		}
-	}
 
 	keyH, rowGap := chooseKeyMetrics(rows, screenHeight, vilBottomPad, vilMinTextRows)
 	keyArea := gridHeight(rows, keyH, rowGap, true)

@@ -149,14 +149,12 @@ func chooseKeyMetrics(rows, screenHeight, bottomPad, minTextRows int) (keyH, row
 
 func kbBuiltinMetrics(screenWidth, screenHeight, splitGap int) (kbMetrics, bool) {
 	keyWidth := 0
-	split := false
 	// At each cap size prefer the split layout, then the single keyboard; the
 	// split is only chosen when it actually fits, so the matrix never runs off
 	// the screen.
 	for kw := 5; kw >= 1; kw-- {
 		if kbSplitWidth(kw, kbKeyGap, splitGap)+2 <= screenWidth {
 			keyWidth = kw
-			split = true
 			break
 		}
 		if kbWidth(kw, kbKeyGap)+2 <= screenWidth {
@@ -168,19 +166,10 @@ func kbBuiltinMetrics(screenWidth, screenHeight, splitGap int) (kbMetrics, bool)
 		return kbMetrics{}, false
 	}
 
-	// Keep the cap size chosen above and spend any spare width on wider
-	// columns. Narrow terminals keep the original spacing.
+	// Keys sit close together: the columns are packed at the minimum gap and
+	// any spare width goes to the home cluster, which is what should stand
+	// apart. Widening every column instead makes the whole board loose.
 	keyGap := kbKeyGap
-	for g := kbMaxKeyGap; g > kbKeyGap; g-- {
-		w := kbWidth(keyWidth, g)
-		if split {
-			w = kbSplitWidth(keyWidth, g, splitGap)
-		}
-		if w+2 <= screenWidth {
-			keyGap = g
-			break
-		}
-	}
 
 	rows := len(kbRows) + 1 // four key rows plus the space row
 	keyH, rowGap := chooseKeyMetrics(rows, screenHeight, kbBottomPad, kbMinTextRows)
@@ -461,10 +450,10 @@ func kbSplitMaxOffset(keyWidth int) int {
 	return max
 }
 
-// homeGapExtra is the blank space of a home gap on top of the normal key gap,
-// in columns of whitespace: enough to set the home keys apart at a glance
-// without the wide hole a full key cell would leave.
-const homeGapExtra = 1
+// homeGapExtra is the blank space of a home gap on top of the normal key gap.
+// The rest of the board is packed tight, so this is what sets the home cluster
+// apart; it is wide enough to read as a cluster boundary at a glance.
+const homeGapExtra = 2
 
 // homeGapStep returns the step of one key column.
 func homeGapStep(keyWidth, keyGap int) int { return keyWidth + keyGap }
