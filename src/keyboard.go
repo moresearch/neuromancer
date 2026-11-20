@@ -462,9 +462,9 @@ func kbSplitMaxOffset(keyWidth int) int {
 }
 
 // homeGapExtra is the blank space of a home gap on top of the normal key gap,
-// in columns of whitespace. Three keeps the home block visibly apart without
-// the wide hole a full key cell would leave.
-const homeGapExtra = 3
+// in columns of whitespace: enough to set the home keys apart at a glance
+// without the wide hole a full key cell would leave.
+const homeGapExtra = 1
 
 // homeGapStep returns the step of one key column.
 func homeGapStep(keyWidth, keyGap int) int { return keyWidth + keyGap }
@@ -491,8 +491,8 @@ type kbHomeBlock struct {
 // columns 1..4. The left block starts at column 0, so only its far side is
 // opened up; the right block has columns on both sides.
 var (
-	kbLeftHome  = kbHomeBlock{start: 0, cols: 4}
-	kbRightHome = kbHomeBlock{start: 1, cols: 4}
+	kbLeftHome  = kbHomeBlock{start: 0, cols: 4, after: true}
+	kbRightHome = kbHomeBlock{start: 1, cols: 4, before: true, after: true}
 )
 
 // halfBlock returns block if it fits a half of halfCols columns, otherwise a
