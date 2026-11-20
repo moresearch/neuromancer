@@ -2026,8 +2026,9 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 			}
 			border = def
 		}
-		inFingerCol := activeCol < 0 || col == activeCol
-		if !highlighted && !(focused && inFingerCol) {
+		// Dim only the half which is not in play. Dimming every key outside
+		// the active finger column makes the rest of the board unreadable.
+		if !highlighted && !focused {
 			style = style.Dim(true)
 			border = border.Dim(true)
 		}

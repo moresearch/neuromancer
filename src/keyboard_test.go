@@ -106,11 +106,10 @@ func TestDrawKeyboardHighlights(t *testing.T) {
 	kb.drawKeyboard('f')
 	// f is the target: its centre still shows the label, like any other key.
 	checkRune("target f border", 1, 2, '╭')
-	// q is in the inactive finger column and is dimmed.
-	if _, attrs := cell(1, 0, 1); attrs&tcell.AttrDim == 0 {
-		t.Error("inactive finger column is not dimmed")
+	// The whole half in play stays readable: other columns are not dimmed.
+	if _, attrs := cell(1, 0, 1); attrs&tcell.AttrDim != 0 {
+		t.Error("keys outside the finger column are dimmed")
 	}
-	// t sits in the active (target) finger column and must not be dimmed.
 	if _, attrs := cell(2, 2, 1); attrs&tcell.AttrDim != 0 {
 		t.Error("active finger column is dimmed")
 	}

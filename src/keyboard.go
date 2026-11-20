@@ -717,8 +717,9 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 				}
 				border = t.defaultStyle
 			}
-			inFingerCol := activeCol < 0 || j == activeCol
-			if !highlighted && !(focused && inFingerCol) {
+			// Dim only the half which is not in play; the active finger column
+			// is already picked out by the brighter home-key colour.
+			if !highlighted && !focused {
 				style = style.Dim(true)
 				border = border.Dim(true)
 			}
