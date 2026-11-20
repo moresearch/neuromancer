@@ -25,8 +25,8 @@ usage: nm \[OPTION\]... \[FILE\]
   of the screen. The key producing the next character is highlighted in green.
   Pressing the wrong key highlights that key's location in red. In each split
   half the four home keys (`arst` on the left, `oien` on the right) form a
-  block with a blank cell on either side, so a reach away from the home columns
-  is visible at a glance.
+  block set off from the other columns by a wider blank on either side, so a
+  reach away from the home columns is visible at a glance.
 
 # OPTIONS
 
@@ -299,13 +299,17 @@ are determined exclusively by the input.
   and leaves padding below the keyboard. Terminal font size itself is
   controlled by your terminal emulator.
 
-  Within each half the four home keys form a contiguous block with one extra
-  blank cell on each side: `a r s t` on the left half and `o i e n` on the
-  right. Every other column keeps the normal spacing, including the outer index
-  columns (`q`/`p`) and the jutting `;'[]\` tail. The thumb keys sit on their own row, indented inward from
-  the outer edge, and the space bar spans the home block, so the thumbs line up
-  under the home fingers. On a terminal too narrow for the split layout the
-  whole keyboard is drawn as one block instead of shrinking every keycap.
+  Within each half the four home keys form a contiguous block with a wider
+  blank on each side: `a r s t` on the left half and `o i e n` on the right.
+  Every other column keeps the normal spacing, including the outer index
+  columns (`q`/`p`), the outer macro column, and the jutting `;'[]\` tail. For
+  a Vial layout the block is measured from the keymap itself, so a Miryoku-style
+  board with an outer macro column keeps `a r s t` after the macro column and
+  `o i e n` next to the inner edge, with the macro column on the far side. The
+  thumb keys sit on their own row, indented inward from the outer edge, and the
+  space bar spans the home block, so the thumbs line up under the home fingers.
+  On a terminal too narrow for the split layout the whole keyboard is drawn as
+  one block instead of shrinking every keycap.
 
   Use **-drill** to generate a test from the characters which require a
   non-base layer. Any text file can also be used as a lesson:

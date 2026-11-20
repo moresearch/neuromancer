@@ -472,11 +472,11 @@ func (kb *vilKeyboard) thumbColX(row, col, keyWidth, keyGap int) int {
 	if !kb.isThumbRow(row) {
 		return kb.colX(col, keyWidth, keyGap)
 	}
-	return thumbX(kb.halfWidthFor(col), kb.homeBlockFor(col), kb.colX(col, keyWidth, keyGap), keyWidth, keyGap)
+	return thumbX(kb.halfFor(col), kb.homeBlockFor(col), kb.colX(col, keyWidth, keyGap), keyWidth, keyGap)
 }
 
-// halfWidthFor is the number of columns in the half holding matrix column col.
-func (kb *vilKeyboard) halfWidthFor(col int) int {
+// halfFor returns the number of columns of the half holding matrix column col.
+func (kb *vilKeyboard) halfFor(col int) (halfCols int) {
 	switch {
 	case kb.splitCols && col < kb.halfCols:
 		return kb.halfCols
@@ -486,17 +486,26 @@ func (kb *vilKeyboard) halfWidthFor(col int) int {
 	return kb.maxCols
 }
 
-// vilHomeBlock is the home block of a Vial half: the four columns nearest the
-// inner edge, which is where the a r s t / n e i o keys sit.
+// vilHomeBlock is the home block of a Vial half. The four home keys (a r s t /
+// n e i o) sit one column in from the inner edge on the left half and two in
+// on the right, because the right half carries its outer macro column past the
+// ' tail:
+//
+//	outer | a r s t | rest        inner | n e i o | outer
+//
+// A half which is no wider than the block (plus its outer column) has no gap.
 func vilHomeBlock(halfCols int) kbHomeBlock {
-	if halfCols <= 4 {
+	if halfCols <= 5 {
 		return kbHomeBlock{start: 0, cols: halfCols}
 	}
-	return kbHomeBlock{start: halfCols - 4, cols: 4}
+	// One column in from the inner edge holds the outer index key (l / m on
+	// Miryoku): a | a r s t ... and ... m | n e i o | ' with the right half's
+	// outer macro column past the quote.
+	return kbHomeBlock{start: halfCols - 5, cols: 4, before: true, after: true}
 }
 
 func (kb *vilKeyboard) homeBlockFor(col int) kbHomeBlock {
-	return vilHomeBlock(kb.halfWidthFor(col))
+	return vilHomeBlock(kb.halfFor(col))
 }
 
 // colX returns the x offset of column col relative to the half which contains
@@ -504,11 +513,11 @@ func (kb *vilKeyboard) homeBlockFor(col int) kbHomeBlock {
 func (kb *vilKeyboard) colX(col, keyWidth, keyGap int) int {
 	switch {
 	case kb.splitCols:
-		return homeColX(kb.halfCols, vilHomeBlock(kb.halfCols), col%kb.halfCols, keyWidth, keyGap)
+		return homeColX(kb.halfCols, kb.homeBlockFor(col), col%kb.halfCols, keyWidth, keyGap)
 	case kb.halfRows > 0:
-		return homeColX(kb.maxCols, vilHomeBlock(kb.maxCols), col, keyWidth, keyGap)
+		return homeColX(kb.maxCols, kb.homeBlockFor(col), col, keyWidth, keyGap)
 	}
-	return col * (keyWidth + keyGap)
+	return col * homeGapStep(keyWidth, keyGap)
 }
 
 func (kb *vilKeyboard) halfWidthWithGap(halfCols, keyWidth, keyGap int) int {

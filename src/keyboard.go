@@ -437,27 +437,48 @@ func kbSplitMaxOffset(keyWidth int) int {
 	return max
 }
 
-// homeGapCells is the blank gap, in key cells, placed between each split's
-// home block (arst / oien) and the columns outside it. In cell units the gap
-// is keyWidth+keyGap wide, i.e. one extra column step.
-const homeGapCells = 1
+// homeGapCells is how far a home block is set off from the neighbouring
+// columns, in quarter cells: 6/4 = one and a half key cells on each open side.
+const homeGapCells = 6
 
-// kbHomeBlock describes the four home columns (a r s t / o i e n) of one
-// half: start is its first column and cols its width.
-type kbHomeBlock struct{ start, cols int }
+// homeGapStep returns the quarter-cell step one key column occupies.
+func homeGapStep(keyWidth, keyGap int) int { return keyWidth + keyGap }
+
+// homeGapXIn returns the blank space taken by one home gap.
+func homeGapXIn(keyWidth, keyGap int) int {
+	return homeGapCells * homeGapStep(keyWidth, keyGap) / 4
+}
+
+// kbHomeBlock describes the four home columns (a r s t / n e i o) of one half
+// and which of their sides are opened up by a home gap.
+type kbHomeBlock struct {
+	start, cols   int
+	before, after bool
+}
 
 // built-in home columns, taken from the home row of kbRows:
 //
 //	col 0 1 2 3 4   5 6 7 8 9 10
 //	key a r s t g   m n e i o  '
 //
-// so a r s t are the left half's columns 0..3 and o i e n the right half's
-// columns 1..4 (the jutting ; [ ] \ tail and the outer index columns stay
-// outside the block).
+// so a r s t are the left half's columns 0..3 and n e i o the right half's
+// columns 1..4. The left block starts at column 0, so only its far side is
+// opened up; the right block has columns on both sides.
 var (
-	kbLeftHome  = kbHomeBlock{start: 0, cols: 4}
-	kbRightHome = kbHomeBlock{start: 1, cols: 4}
+	kbLeftHome  = kbHomeBlock{start: 0, cols: 4, after: true}
+	kbRightHome = kbHomeBlock{start: 1, cols: 4, before: true, after: true}
 )
+
+// halfBlock returns block if it fits a half of halfCols columns, otherwise a
+// block covering the whole half (no home gap).
+func halfBlock(halfCols int, block kbHomeBlock) (kbHomeBlock, bool) {
+	if block.cols == 0 || block.start+block.cols > halfCols {
+		return kbHomeBlock{start: 0, cols: halfCols}, false
+	}
+	block.before = block.before && block.start > 0
+	block.after = block.after && block.start+block.cols < halfCols
+	return block, true
+}
 
 // homeColX returns the x offset of column col relative to its half's origin,
 // counting the home-column gaps. Widths and drawing both use it.
@@ -465,16 +486,17 @@ func homeColX(halfCols int, block kbHomeBlock, col, keyWidth, keyGap int) int {
 	if col < 0 {
 		return 0
 	}
-	if block.cols == 0 || block.cols >= halfCols {
-		return col * (keyWidth + keyGap)
+	block, framed := halfBlock(halfCols, block)
+	if !framed {
+		return col * homeGapStep(keyWidth, keyGap)
 	}
-	// The home block is an island: a blank cell on each side of it.
-	x := col * (keyWidth + keyGap)
-	if col >= block.start {
-		x += homeGapCells * (keyWidth + keyGap)
+	gap := homeGapXIn(keyWidth, keyGap)
+	x := col * homeGapStep(keyWidth, keyGap)
+	if block.before && col >= block.start {
+		x += gap
 	}
-	if col >= block.start+block.cols {
-		x += homeGapCells * (keyWidth + keyGap)
+	if block.after && col >= block.start+block.cols {
+		x += gap
 	}
 	return x
 }
@@ -530,7 +552,7 @@ const thumbIndentCells = 2
 // the half.
 func thumbX(halfCols int, block kbHomeBlock, x, keyWidth, keyGap int) int {
 	half := lenWithGap(halfCols, block, keyWidth, keyGap)
-	indent := thumbIndentCells * (keyWidth + keyGap)
+	indent := thumbIndentCells * homeGapStep(keyWidth, keyGap)
 	if x+indent+keyWidth <= half {
 		return x + indent
 	}
@@ -538,17 +560,21 @@ func thumbX(halfCols int, block kbHomeBlock, x, keyWidth, keyGap int) int {
 }
 
 // homeSpaceRect returns the left edge and width of a half's space bar. The bar
-// sits on the indented thumb row, starting under the home gap and spanning the
-// home block (arst / oien).
+// sits on the indented thumb row and spans the home block (arst / oien),
+// together with the gap in front of it.
 func homeSpaceRect(halfCols int, block kbHomeBlock, keyWidth, keyGap int) (x, width int) {
-	if block.cols == 0 || block.cols >= halfCols {
-		x = thumbX(halfCols, block, 0, keyWidth, keyGap)
-		return x, halfCols*keyWidth + (halfCols-1)*keyGap
+	block, framed := halfBlock(halfCols, block)
+	if !framed {
+		return thumbX(halfCols, block, 0, keyWidth, keyGap), halfCols*keyWidth + (halfCols-1)*keyGap
 	}
-	// Start at the gap before the home block and cover the home columns.
-	width = block.cols*keyWidth + (block.cols-1)*keyGap + homeGapCells*keyGap
+	width = block.cols*keyWidth + (block.cols-1)*keyGap
 	x = homeColX(halfCols, block, block.start, keyWidth, keyGap)
-	return thumbX(halfCols, block, x-homeGapCells*(keyWidth+keyGap), keyWidth, keyGap), width
+	if block.before {
+		// Include the gap which separates the home block from the outer block.
+		width += homeGapXIn(keyWidth, keyGap)
+		x -= homeGapXIn(keyWidth, keyGap)
+	}
+	return thumbX(halfCols, block, x, keyWidth, keyGap), width
 }
 
 func kbSplitWidth(keyWidth, keyGap, splitGap int) int {
