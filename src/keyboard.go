@@ -190,16 +190,30 @@ func kbOffset(row, keyWidth int) int {
 	return kbRows[row].offset
 }
 
+// kbWidth is the width of the un-split matrix. The full-width layout keeps the
+// home-column gaps of both halves, so the halves stay distinguishable.
 func kbWidth(keyWidth, keyGap int) int {
 	width := 0
 	for i, row := range kbRows {
-		rowWidth := kbOffset(i, keyWidth) + len(row.keys)*keyWidth + (len(row.keys)-1)*keyGap
+		last := len(row.keys) - 1
+		rowWidth := kbOffset(i, keyWidth) + kbFullKeyX(last, keyWidth, keyGap) + keyWidth
 		if rowWidth > width {
 			width = rowWidth
 		}
 	}
 
 	return width
+}
+
+// kbFullKeyX returns the x offset of column col when the matrix is drawn as a
+// single block: the left half's gaps, then the right half's.
+func kbFullKeyX(col, keyWidth, keyGap int) int {
+	if col < kbSplitCol {
+		return homeColX(kbSplitCol, col, keyWidth, keyGap)
+	}
+	rightCols := len(kbRows[0].keys) - kbSplitCol
+	return lenWithGap(kbSplitCol, keyWidth, keyGap) +
+		homeColX(rightCols, col-kbSplitCol, keyWidth, keyGap)
 }
 
 // keyboardVisible reports whether the matrix fits on screen and where it starts.
@@ -438,25 +452,30 @@ func homeBlockStart(halfCols int) int {
 }
 
 // homeColX returns the x offset of column col relative to its half's origin,
-// counting the home-column gap. Widths and drawing both use it.
+// counting the home-column gaps. Widths and drawing both use it.
 func homeColX(halfCols, col, keyWidth, keyGap int) int {
 	if col < 0 {
 		return 0
 	}
 	start := homeBlockStart(halfCols)
-	if halfCols > 4 && col >= start {
-		return (col + homeGapCells) * (keyWidth + keyGap)
+	gap := homeGapCells * (keyWidth + keyGap)
+	if halfCols <= 4 {
+		return col * (keyWidth + keyGap)
 	}
-	return col * (keyWidth + keyGap)
+	// The home block is an island: a blank cell on each side of it.
+	x := col * (keyWidth + keyGap)
+	if col >= start {
+		x += gap
+	}
+	if col >= start+4 {
+		x += gap
+	}
+	return x
 }
 
-// lenWithGap is the width of halfCols key columns plus the home gap, if any.
+// lenWithGap is the width of halfCols key columns plus the home gaps, if any.
 func lenWithGap(halfCols uint, keyWidth, keyGap int) int {
-	cols := int(halfCols)
-	if cols > 4 {
-		cols += homeGapCells
-	}
-	return cols*keyWidth + (cols-1)*keyGap
+	return homeColX(int(halfCols), int(halfCols), keyWidth, keyGap) - keyGap
 }
 
 func kbSplitLeftWidth(keyWidth, keyGap int) int {
@@ -478,7 +497,7 @@ func kbSplitRightWidth(keyWidth, keyGap int) int {
 
 // kbSplitKeyX returns the x offset of key col of matrix row row (relative to
 // the split's own origin) and whether the key is in the right half. The row
-// stagger and the home-column gap are included, so drawing, widths and hit
+// stagger and the home-column gaps are included, so drawing, widths and hit
 // positions all agree.
 func kbSplitKeyX(row, col, keyWidth, keyGap int) (x int, right bool) {
 	if col < 0 {
@@ -496,19 +515,34 @@ func kbSplitKeyX(row, col, keyWidth, keyGap int) (x int, right bool) {
 	return homeColX(max, col-kbSplitCol, keyWidth, keyGap), true
 }
 
+// thumbIndentCells is how far the thumb row is pulled in from each half's
+// outer edge, so the thumbs sit under the home block rather than the whole
+// half.
+const thumbIndentCells = 2
+
+// thumbX shifts a thumb row position inward by the indent, keeping it inside
+// the half.
+func thumbX(halfCols, x, keyWidth, keyGap int) int {
+	half := lenWithGap(uint(halfCols), keyWidth, keyGap)
+	indent := thumbIndentCells * (keyWidth + keyGap)
+	if x+indent+keyWidth <= half {
+		return x + indent
+	}
+	return x
+}
+
 // homeSpaceRect returns the left edge and width of a half's space bar. The bar
-// starts at the blank home gap and spans the home block (arst / oien), so the
-// thumbs line up under the home fingers' inner reach.
+// sits on the indented thumb row, starting under the home gap and spanning the
+// home block (arst / oien).
 func homeSpaceRect(halfCols, keyWidth, keyGap int) (x, width int) {
 	start := homeBlockStart(halfCols)
 	x = homeColX(halfCols, start, keyWidth, keyGap)
 	if halfCols <= 4 {
-		// A half which is all home columns has no gap to include.
-		return x, halfCols*keyWidth + (halfCols-1)*keyGap
+		return thumbX(halfCols, x, keyWidth, keyGap), halfCols*keyWidth + (halfCols-1)*keyGap
 	}
-	// Reach back over the gap and cover the four home columns plus it.
-	return x - homeGapCells*(keyWidth+keyGap),
-		(4+homeGapCells)*keyWidth + (3+homeGapCells)*keyGap
+	// Start at the gap before the home block and cover the four home columns.
+	width = 4*keyWidth + 3*keyGap + homeGapCells*keyGap
+	return thumbX(halfCols, x-homeGapCells*(keyWidth+keyGap), keyWidth, keyGap), width
 }
 
 func kbSplitWidth(keyWidth, keyGap, splitGap int) int {
@@ -598,7 +632,7 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 		offset := kbOffset(i, m.keyWidth)
 
 		for j, ch := range row.keys {
-			x := x0 + offset + j*(m.keyWidth+m.keyGap)
+			x := x0 + offset + kbFullKeyX(j, m.keyWidth, m.keyGap)
 			focused := true
 			if split {
 				var gx int

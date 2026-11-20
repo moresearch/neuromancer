@@ -384,7 +384,8 @@ func TestVilHomeGap(t *testing.T) {
 		t.Fatal("keyboard does not fit")
 	}
 
-	// Every key is drawn as "╭…╮"; record each run's left edge.
+	// Row 0 holds the two outer columns and the four home columns of each
+	// half. Every key is drawn as "╭…╮"; record each cap's left edge.
 	var caps []int
 	open := false
 	for x := 0; x < sw; x++ {
@@ -397,27 +398,51 @@ func TestVilHomeGap(t *testing.T) {
 			open = false
 		}
 	}
-	halfCap := caps[0] + kb.halfWidthWithGap(kb.halfCols, m.keyWidth, m.keyGap) + m.splitGap
-	left := caps[:0:0]
-	for _, x := range caps {
-		if x < halfCap {
-			left = append(left, x)
-		}
+	if len(caps) != 2*kb.halfCols {
+		t.Fatalf("found %d keycaps, want %d: %v", len(caps), 2*kb.halfCols, caps)
 	}
-	if len(left) != kb.halfCols {
-		t.Fatalf("left half has %d keycaps, want %d: %v", len(left), kb.halfCols, caps)
-	}
-	// One outer column, then the gap, then the four home columns.
+	left := caps[:kb.halfCols]
+	right := caps[kb.halfCols:]
+
 	step := m.keyWidth + m.keyGap
-	if gap := left[1] - left[0]; gap != step+m.keyWidth {
-		t.Errorf("vil gap step=%d want %d", gap, step+m.keyWidth)
-	}
-	for i := 2; i < len(left); i++ {
-		if left[i]-left[i-1] != step {
-			t.Errorf("vil home columns are not contiguous: %v", left)
+	outer := homeBlockStart(kb.halfCols) // first home column of a half
+
+	check := func(name string, caps []int) {
+		// The outer columns stay contiguous, the four home columns stay
+		// contiguous, and the block is set off by one blank cell on each side.
+		for i := 1; i < outer; i++ {
+			if caps[i]-caps[i-1] != step {
+				t.Errorf("%s: outer columns are not contiguous: %v", name, caps)
+			}
+		}
+		if gap := caps[outer] - caps[outer-1]; gap != step+m.keyWidth {
+			t.Errorf("%s: gap before the home block is %d, want %d", name, gap, step+m.keyWidth)
+		}
+		for i := outer + 1; i < outer+4; i++ {
+			if caps[i]-caps[i-1] != step {
+				t.Errorf("%s: home columns are not contiguous: %v", name, caps)
+			}
+		}
+		if len(caps) > outer+4 {
+			if gap := caps[outer+4] - caps[outer+3]; gap != step+m.keyWidth {
+				t.Errorf("%s: gap after the home block is %d, want %d", name, gap, step+m.keyWidth)
+			}
 		}
 	}
-	if caps[len(left)] != halfCap {
-		t.Errorf("right half starts at %d, want %d", caps[len(left)], halfCap)
+	check("left", left)
+	check("right", right)
+	if right[0] != left[0]+kb.halfWidthWithGap(kb.halfCols, m.keyWidth, m.keyGap)+m.splitGap {
+		t.Errorf("right half starts at %d, want %d", right[0],
+			left[0]+kb.halfWidthWithGap(kb.halfCols, m.keyWidth, m.keyGap)+m.splitGap)
+	}
+
+	// The thumb row is pulled in from the outer edge, so its leftmost cap is
+	// right of the outer column above it.
+	thumbY := m.top + (len(kb.layers[0].matrix)-1)*(m.keyH+m.rowGap)
+	if !kb.isThumbRow(len(kb.layers[0].matrix) - 1) {
+		return
+	}
+	if ch, _, _, _ := sim.GetContent(left[0], thumbY); ch != ' ' {
+		t.Errorf("thumb row is not indented: cell %d is %q", left[0], string(ch))
 	}
 }

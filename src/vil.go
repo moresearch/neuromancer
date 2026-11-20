@@ -466,6 +466,22 @@ func isHomeDistance(halfCols, d int) bool {
 	return d >= 1 && d <= 4
 }
 
+// thumbColX is colX for a key on a thumb row: the thumb cluster is pulled in
+// from the outer edge so it sits under the home block.
+func (kb *vilKeyboard) thumbColX(row, col, keyWidth, keyGap int) int {
+	halfCols := kb.maxCols
+	switch {
+	case kb.splitCols && col < kb.halfCols:
+		halfCols = kb.halfCols
+	case kb.splitCols:
+		halfCols = kb.maxCols - kb.halfCols
+	}
+	if !kb.isThumbRow(row) {
+		return kb.colX(col, keyWidth, keyGap)
+	}
+	return thumbX(halfCols, kb.colX(col, keyWidth, keyGap), keyWidth, keyGap)
+}
+
 // colX returns the x offset of column col relative to the half which contains
 // it, including the home-column gap. Drawing and width both go through it.
 func (kb *vilKeyboard) colX(col, keyWidth, keyGap int) int {
@@ -1929,6 +1945,6 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 			border = border.Dim(true)
 		}
 
-		drawKBButton(scr, x+kb.colX(col, keyWidth, keyGap), y, keyWidth, keyH, label, top, style, border)
+		drawKBButton(scr, x+kb.thumbColX(matrixRow, col, keyWidth, keyGap), y, keyWidth, keyH, label, top, style, border)
 	}
 }
