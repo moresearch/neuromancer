@@ -471,31 +471,11 @@ func isHomeDistance(halfCols, d int) bool {
 // out from the start of their half, so a split keyboard's thumb clusters stay
 // where the keymap puts them (flush with the inner edge of each half).
 func (kb *vilKeyboard) thumbColX(row, col, keyWidth, keyGap int) int {
-	if !kb.isThumbRow(row) {
-		return kb.colX(col, keyWidth, keyGap)
-	}
-	halfCols := kb.halfFor(col)
-	first := 0
-	if kb.halfRows == 0 && kb.splitCols && col >= kb.halfCols {
-		first = kb.halfCols
-	}
-	// Right-align the cluster against the half's inner edge, the way a split
-	// keyboard tucks its thumb keys in, and keep the key order within it.
-	thumbCount := 0
-	before := 0
-	for c := first; c < halfCols; c++ {
-		if kb.cellPresent(row, c) {
-			thumbCount++
-			if c < col {
-				before++
-			}
-		}
-	}
-	if thumbCount == 0 {
-		return 0
-	}
-	half := lenWithGap(halfCols, kb.homeBlockFor(col), keyWidth, keyGap)
-	return half - (thumbCount-before)*homeGapStep(keyWidth, keyGap)
+	// Thumb keys sit on the same column grid as every other row: the keymap's
+	// own columns decide where they are. That keeps the thumbs under the
+	// columns the layout puts them in, and stops them colliding with the alpha
+	// rows.
+	return kb.colX(col, keyWidth, keyGap)
 }
 
 // cellPresent reports whether row has a key at col.

@@ -301,10 +301,10 @@ func (t *typer) chatPanelGap(m kbMetrics) (int, bool) {
 		x0 := (sw - width) / 2
 		switch {
 		case kb.splitCols:
-			left := kb.halfWidth(m.keyWidth, m.keyGap)
+			left := kb.halfWidthWithGap(kb.halfCols, m.keyWidth, m.keyGap)
 			return x0 + left, true
 		case kb.halfRows > 0:
-			left := kb.halfWidth(m.keyWidth, m.keyGap)
+			left := kb.halfWidthWithGap(kb.maxCols, m.keyWidth, m.keyGap)
 			return x0 + left, true
 		}
 		return 0, false
@@ -352,16 +352,11 @@ func (t *typer) chatPanelRect(m kbMetrics) (x, y, width, height int, ok bool) {
 		return 0, 0, 0, 0, false
 	}
 
-	// Centre the panel on the screen. The built-in halves are not equally wide,
-	// so the raw split gap is not centred; placing the panel at the grid
-	// centre keeps it under the middle of the text, and it still falls inside
-	// the gap because the gap is much wider than the box.
-	x = (sw - width) / 2
-	if lo := gapX; x < lo {
-		x = lo
-	}
-	if hi := gapX + m.splitGap - width; x > hi {
-		x = hi
+	// The panel lives in the gap between the halves and must never cover a
+	// key: centre it there, not on the screen.
+	x = gapX + (m.splitGap-width)/2
+	if x < gapX {
+		x = gapX
 	}
 	y = m.top + (m.height-height)/2
 	if x < 1 || x+width > sw-1 {

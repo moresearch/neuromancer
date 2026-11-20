@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"runtime"
 	"strconv"
@@ -136,7 +137,7 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 
 		defaultStyle:        def,
 		correctStyle:        correctStyle,
-		currentWordStyle:    def.Foreground(hicol2),
+		currentWordStyle:    def.Foreground(ensureReadable(hicol2, bgcol)),
 		nextWordStyle:       def.Foreground(hicol3),
 		incorrectStyle:      def.Foreground(errcol),
 		errColor:            errcol,
@@ -147,6 +148,48 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 		neonGreen: tcell.NewHexColor(0x39FF14),
 		neonAmber: tcell.NewHexColor(0xFFB000),
 	}
+}
+
+// relativeLuminance is the WCAG relative luminance of c, or -1 for colours which
+// cannot be measured (the terminal default).
+func relativeLuminance(c tcell.Color) float64 {
+	r, g, b := c.RGB()
+	lin := func(v int32) float64 {
+		f := float64(v) / 255
+		if f <= 0.03928 {
+			return f / 12.92
+		}
+		return math.Pow((f+0.055)/1.055, 2.4)
+	}
+	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
+}
+
+// contrastRatio is the WCAG contrast between two colours, or -1 when either is
+// the terminal default and therefore unknowable.
+func contrastRatio(a, b tcell.Color) float64 {
+	la, lb := relativeLuminance(a), relativeLuminance(b)
+	if la < 0 || lb < 0 {
+		return -1
+	}
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+// minTextContrast is the WCAG AA threshold for large text. The current word is
+// the one the typist is reading, so it must stay legible; a theme whose
+// highlight colour is too close to the background would otherwise hide it.
+const minTextContrast = 3.0
+
+// ensureReadable returns fg, or the theme's normal text colour when fg would
+// be hard to read on bg. Themes may pick a dim highlight, but a word the user
+// is meant to type must never disappear into the background.
+func ensureReadable(fg, bg tcell.Color) tcell.Color {
+	if c := contrastRatio(fg, bg); c >= 0 && c < minTextContrast {
+		return tcell.ColorDefault
+	}
+	return fg
 }
 
 // drawLiveStats renders the cyberpunk speed readout centered on cx at row y.
