@@ -123,26 +123,18 @@ func chooseKeyMetrics(rows, screenHeight, bottomPad, minTextRows int) (keyH, row
 func kbBuiltinMetrics(screenWidth, screenHeight, splitGap int) (kbMetrics, bool) {
 	keyWidth := 0
 	split := false
-	// Prefer full-size caps on the single keyboard, then the split layout at
-	// full size, and only then shrink the caps to keep the split.
+	// At each cap size prefer the split layout, then the single keyboard; the
+	// split is only chosen when it actually fits, so the matrix never runs off
+	// the screen.
 	for kw := 5; kw >= 1; kw-- {
-		if kbWidth(kw, kbKeyGap)+2 <= screenWidth {
-			keyWidth = kw
-			break
-		}
 		if kbSplitWidth(kw, kbKeyGap, splitGap)+2 <= screenWidth {
 			keyWidth = kw
 			split = true
 			break
 		}
-	}
-	if keyWidth == 0 && screenWidth >= kbWideScreen {
-		for kw := 4; kw >= 1; kw-- {
-			if kbSplitWidth(kw, kbKeyGap, splitGap)+2 <= screenWidth {
-				keyWidth = kw
-				split = true
-				break
-			}
+		if kbWidth(kw, kbKeyGap)+2 <= screenWidth {
+			keyWidth = kw
+			break
 		}
 	}
 	if keyWidth == 0 {
@@ -517,10 +509,11 @@ func kbSplitLeftWidth(keyWidth, keyGap int) int {
 	return kbSplitMaxOffset(keyWidth) + lenWithGap(kbSplitCol, kbLeftHome, keyWidth, keyGap)
 }
 
-// kbSplitLeftPad is the blank space added on the left so both halves take the
-// same width. The rows of the right half jut out (; [ ] \ and ') which makes
-// it wider, and an uneven matrix would leave the split gap, and the Chatsubo
-// box inside it, off centre.
+// kbSplitLeftPad is blank space added to the right of the left half so both
+// halves take the same width. The right half's rows jut out (; [ ] \ and ')
+// which makes it wider; the padding goes inside the split gap, next to the
+// left half, so the halves and the Chatsubo box stay centred without shifting
+// the left half's keys.
 func kbSplitLeftPad(keyWidth, keyGap int) int {
 	pad := kbSplitRightWidth(keyWidth, keyGap) - kbSplitLeftWidth(keyWidth, keyGap)
 	if pad < 0 {
@@ -685,7 +678,7 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 					x = x0 + leftWidth + m.splitGap + gx
 					focused = focusRight
 				} else {
-					x = x0 + kbSplitLeftPad(m.keyWidth, m.keyGap) + gx
+					x = x0 + gx
 					focused = focusLeft
 				}
 			}

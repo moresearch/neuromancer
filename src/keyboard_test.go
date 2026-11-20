@@ -81,7 +81,7 @@ func TestDrawKeyboardHighlights(t *testing.T) {
 		if right {
 			return x0 + leftWidth + m.splitGap + gx
 		}
-		return x0 + kbSplitLeftPad(m.keyWidth, m.keyGap) + gx
+		return x0 + gx
 	}
 	keyY := func(row int) int {
 		return m.top + row*(m.keyH+m.rowGap)
@@ -191,7 +191,7 @@ func TestBuiltinTargetFingerHome(t *testing.T) {
 		if right {
 			return x0 + leftWidth + m.splitGap + gx
 		}
-		return x0 + kbSplitLeftPad(m.keyWidth, m.keyGap) + gx
+		return x0 + gx
 	}
 	keyY := func(row int) int {
 		return m.top + row*(m.keyH+m.rowGap)

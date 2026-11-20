@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -291,6 +292,12 @@ type statsSeg struct {
 // in neon accents. The panel is narrower than the standalone HUD, so showCPM
 // drops the CPM figure there and keeps the score figures instead.
 func (t *typer) statsSegments(wpm, cpm int, acc float64, errs int, flashOn, showCPM, showErrs bool) []statsSeg {
+	return t.statsSegmentsFull(wpm, cpm, acc, errs, flashOn, showCPM, showErrs, true)
+}
+
+// statsSegmentsFull is statsSegments with control over the LAST/BEST tail, so
+// the narrow chatsubo body can drop it when it would not fit.
+func (t *typer) statsSegmentsFull(wpm, cpm int, acc float64, errs int, flashOn, showCPM, showErrs, showScore bool) []statsSeg {
 	wpmColor, arrow := t.neonCyan, "▸"
 	switch {
 	case wpm >= 100:
@@ -339,6 +346,13 @@ func (t *typer) statsSegments(wpm, cpm int, acc float64, errs int, flashOn, show
 			statsSeg{fmt.Sprintf("%d ERR", errs), t.defaultStyle.Foreground(t.neonAmber)},
 		)
 	}
+	if !showScore {
+		// Drop the dangling separator so the readout ends on a value.
+		for len(segs) > 0 && strings.TrimSpace(segs[len(segs)-1].s) == "·" {
+			segs = segs[:len(segs)-1]
+		}
+		return segs
+	}
 	return append(segs, t.scoreSegments()...)
 }
 
@@ -382,10 +396,11 @@ func (t *typer) saveScore() {
 // then without the error count so LAST/BEST stay visible.
 func (t *typer) drawPanelStats(x, row, maxCols, wpm, cpm int, acc float64, errs int) {
 	variants := []struct {
-		showCPM, showErrs bool
-	}{{false, true}, {false, false}}
+		showCPM, showErrs, showScore bool
+	}{{true, true, true}, {false, true, true}, {false, false, true}, {false, false, false}}
 	for _, v := range variants {
-		if t.paintPanelStats(x, row, maxCols, t.statsSegments(wpm, cpm, acc, errs, t.statsFlashOn(), v.showCPM, v.showErrs)) {
+		segs := t.statsSegmentsFull(wpm, cpm, acc, errs, t.statsFlashOn(), v.showCPM, v.showErrs, v.showScore)
+		if t.paintPanelStats(x, row, maxCols, segs) {
 			return
 		}
 	}

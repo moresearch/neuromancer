@@ -468,10 +468,10 @@ func (t *typer) drawChatsubo() {
 	t.panelDrawn = true
 
 	contentRows := height - 2
-	topPad, bottomPad := 0, 0
+	topPad := 0
 	if height >= chatsuboFullHeight {
 		contentRows = height - 4
-		topPad, bottomPad = 1, 1
+		topPad = 1
 	}
 	if contentRows < 1 {
 		return
@@ -508,27 +508,22 @@ func (t *typer) drawChatsubo() {
 		drawString(t.Scr, x, row, line, -1, t.defaultStyle)
 	}
 
+	// Body layout: guidance and commentary at the top, the live stats pinned
+	// to the last two rows of the box so the numbers never move.
+	statsRows := 0
+	if contentRows > 1 {
+		statsRows = 2
+	} else if contentRows == 1 {
+		statsRows = 1
+	}
+	textRows := contentRows - statsRows
+
 	row := y + 1
-	rowsLeft := contentRows
-	if rowsLeft > 0 {
-		// The live speed readout tops the panel's body and is always
-		// visible, showing 0 before the first keystroke. Paint the empty
-		// box row first so the frame's side borders stay intact.
-		// Equalizer first, then the numbers beneath it; both rows are
-		// painted over blank box rows so the frame borders stay intact.
-		if rowsLeft > 1 {
-			drawBlank(row)
-			t.drawEqualizer(x+3, row, bodyCols-1, 1, t.defaultStyle)
-			row++
-			rowsLeft--
-		}
+	rowsLeft := textRows
+	if topPad > 0 && rowsLeft > 0 {
 		drawBlank(row)
-		t.drawPanelStats(x+3, row, bodyCols-1, t.curWpm, t.curCpm, t.curAcc, t.curErrs)
 		row++
 		rowsLeft--
-	} else if topPad > 0 {
-		drawBlank(row)
-		row++
 	}
 
 	guidance := strings.Join(strings.Fields(t.hintText), " ")
@@ -552,17 +547,26 @@ func (t *typer) drawChatsubo() {
 			rowsLeft--
 		}
 	}
-	for rowsLeft > 0 {
-		drawBoxLine(row, "", t.defaultStyle)
-		row++
-		rowsLeft--
-	}
-
-	if bottomPad > 0 {
+	// Fill everything between the text and the stats so the side borders are
+	// continuous.
+	for row < y+height-1-statsRows {
 		drawBlank(row)
 		row++
 	}
 
+	// Stats at the bottom of the box: equalizer row, then the numbers.
+	// Stats sit on the last body rows, immediately above the bottom border.
+	statsRow := y + height - 2
+	if statsRows == 2 {
+		statsRow--
+		drawBlank(statsRow)
+		t.drawEqualizer(x+3, statsRow, bodyCols-1, 1, t.defaultStyle)
+		statsRow++
+	}
+	if statsRows >= 1 {
+		drawBlank(statsRow)
+		t.drawPanelStats(x+3, statsRow, bodyCols-1, t.curWpm, t.curCpm, t.curAcc, t.curErrs)
+	}
 	bottom := "╰" + strings.Repeat("─", width-2) + "╯"
 	drawString(t.Scr, x, y+height-1, bottom, -1, border)
 }
