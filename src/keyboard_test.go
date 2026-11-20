@@ -279,15 +279,16 @@ func TestBuiltinHomeGap(t *testing.T) {
 		return homeColX(halfCols, block, col, kw, kg)
 	}
 
-	// The home blocks are a r s t (left, columns 0..3) and n e i o (right,
-	// columns 1..4); each is an island with one blank cell on either side.
+	// The home blocks are a r s t (left) and n e i o (right); each is set off
+	// from the rest by a home gap. The block itself may start at column 0, in
+	// which case there is no column to its left to measure against.
 	checkBlock := func(name string, halfCols int, block kbHomeBlock) {
 		for col := block.start + 1; col < block.start+block.cols; col++ {
 			if d := colX(halfCols, block, col) - colX(halfCols, block, col-1); d != step {
 				t.Errorf("%s: home columns are not contiguous at %d: %d", name, col, d)
 			}
 		}
-		if block.before {
+		if block.before && block.start > 0 {
 			if d := colX(halfCols, block, block.start) - colX(halfCols, block, block.start-1); d != step+cell {
 				t.Errorf("%s: gap before the block is %d, want %d", name, d, step+cell)
 			}

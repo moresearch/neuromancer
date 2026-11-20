@@ -1510,6 +1510,10 @@ func (kb *vilKeyboard) width(keyWidth, keyGap, splitGap int) int {
 	return half
 }
 
+// vilKeyGap is the gap between Vial caps. The board is otherwise packed, so
+// this is the minimum that keeps neighbouring caps apart.
+const vilKeyGap = 1
+
 func (kb *vilKeyboard) widestKey(screenWidth, keyGap, splitGap int) int {
 	for kw := 8; kw >= 1; kw-- {
 		if w := kb.width(kw, keyGap, splitGap); w > 0 && w+2 <= screenWidth {
@@ -1525,15 +1529,14 @@ func (kb *vilKeyboard) metrics(screenWidth, screenHeight, splitGap int) (kbMetri
 		return kbMetrics{}, false
 	}
 
-	// Size the caps against the tightest layout so the wider column gap can
-	// never shrink them; then spend spare width on that gap.
-	keyWidth := kb.widestKey(screenWidth, 0, splitGap)
+	// Keys are packed tight, but they still need a gap between the caps, so the
+	// cap size is chosen with that gap already included: choosing against a
+	// zero gap and then adding one overflows the terminal.
+	keyGap := vilKeyGap
+	keyWidth := kb.widestKey(screenWidth, keyGap, splitGap)
 	if keyWidth == 0 {
 		return kbMetrics{}, false
 	}
-	// Keys are packed tight; the home cluster's gap is what sets those columns
-	// apart, so spare width is not spent widening every column.
-	keyGap := 0
 
 	keyH, rowGap := chooseKeyMetrics(rows, screenHeight, vilBottomPad, vilMinTextRows)
 	keyArea := gridHeight(rows, keyH, rowGap, true)

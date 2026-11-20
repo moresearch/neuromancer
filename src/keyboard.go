@@ -453,7 +453,7 @@ func kbSplitMaxOffset(keyWidth int) int {
 // homeGapExtra is the blank space of a home gap on top of the normal key gap.
 // The rest of the board is packed tight, so this is what sets the home cluster
 // apart; it is wide enough to read as a cluster boundary at a glance.
-const homeGapExtra = 2
+const homeGapExtra = 3
 
 // homeGapStep returns the step of one key column.
 func homeGapStep(keyWidth, keyGap int) int { return keyWidth + keyGap }
@@ -480,7 +480,7 @@ type kbHomeBlock struct {
 // columns 1..4. The left block starts at column 0, so only its far side is
 // opened up; the right block has columns on both sides.
 var (
-	kbLeftHome  = kbHomeBlock{start: 0, cols: 4, after: true}
+	kbLeftHome  = kbHomeBlock{start: 0, cols: 4, before: true, after: true}
 	kbRightHome = kbHomeBlock{start: 1, cols: 4, before: true, after: true}
 )
 
@@ -490,7 +490,6 @@ func halfBlock(halfCols int, block kbHomeBlock) (kbHomeBlock, bool) {
 	if block.cols == 0 || block.start+block.cols > halfCols {
 		return kbHomeBlock{start: 0, cols: halfCols}, false
 	}
-	block.before = block.before && block.start > 0
 	block.after = block.after && block.start+block.cols < halfCols
 	return block, true
 }
