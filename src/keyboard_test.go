@@ -338,9 +338,10 @@ func TestVilHomeGap(t *testing.T) {
 	if !ok {
 		t.Fatal("keyboard does not fit")
 	}
-	block := vilHomeBlock(kb.halfCols)
-	if !block.before || !block.after {
-		t.Fatalf("block %+v does not frame the home columns", block)
+	leftBlock := vilHomeBlock(kb.halfCols, false)
+	rightBlock := vilHomeBlock(kb.halfCols, true)
+	if !leftBlock.before || !leftBlock.after {
+		t.Fatalf("block %+v does not frame the home columns", leftBlock)
 	}
 
 	// Every key is drawn as "╭…╮"; record each cap's left edge on row 0.
@@ -362,7 +363,7 @@ func TestVilHomeGap(t *testing.T) {
 
 	step := m.keyWidth + m.keyGap
 	gap := homeGapXIn(m.keyWidth, m.keyGap)
-	check := func(name string, caps []int) {
+	check := func(name string, caps []int, block kbHomeBlock) {
 		for i := block.start + 1; i < block.start+block.cols; i++ {
 			if d := caps[i] - caps[i-1]; d != step {
 				t.Errorf("%s: home columns are not contiguous at %d: %d", name, i, d)
@@ -379,6 +380,6 @@ func TestVilHomeGap(t *testing.T) {
 			}
 		}
 	}
-	check("left", caps[:kb.halfCols])
-	check("right", caps[kb.halfCols:])
+	check("left", caps[:kb.halfCols], leftBlock)
+	check("right", caps[kb.halfCols:], rightBlock)
 }

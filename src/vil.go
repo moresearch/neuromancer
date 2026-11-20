@@ -475,7 +475,7 @@ func (kb *vilKeyboard) thumbColX(row, col, keyWidth, keyGap int) int {
 	// own columns decide where they are. That keeps the thumbs under the
 	// columns the layout puts them in, and stops them colliding with the alpha
 	// rows.
-	return kb.colX(col, keyWidth, keyGap)
+	return kb.colX(row, col, keyWidth, keyGap)
 }
 
 // cellPresent reports whether row has a key at col.
@@ -506,28 +506,52 @@ func (kb *vilKeyboard) halfFor(col int) (halfCols int) {
 //	outer | a r s t | rest        inner | n e i o | outer
 //
 // A half which is no wider than the block (plus its outer column) has no gap.
-func vilHomeBlock(halfCols int) kbHomeBlock {
-	if halfCols <= 5 {
+func vilHomeBlock(halfCols int, right bool) kbHomeBlock {
+	if halfCols <= 4 {
 		return kbHomeBlock{start: 0, cols: halfCols}
 	}
-	// One column in from the inner edge holds the outer index key (l / m on
-	// Miryoku): a | a r s t ... and ... m | n e i o | ' with the right half's
-	// outer macro column past the quote.
-	return kbHomeBlock{start: halfCols - 5, cols: 4, before: true, after: true}
+	// The home columns are the ones the fingers rest on: a r s t on the left
+	// half and n e i o on the right. The right half starts one column later
+	// because its first column is the outer index key (m, beside the split).
+	// g, m(->l) and the jutting keys are not home columns.
+	start := 1
+	if right {
+		start = 2
+	}
+	return kbHomeBlock{start: start, cols: 4, before: true, after: true}
 }
 
+// homeBlockFor is the home block of the half holding matrix column col. A
+// matrix split by rows puts the right half in its lower rows, so the row
+// decides the side; a matrix split by columns uses the column.
 func (kb *vilKeyboard) homeBlockFor(col int) kbHomeBlock {
-	return vilHomeBlock(kb.halfFor(col))
+	return vilHomeBlock(kb.halfFor(col), kb.rightHalfAt(0, col))
+}
+
+// homeBlockAt is homeBlockFor for a key at (row, col).
+func (kb *vilKeyboard) homeBlockAt(row, col int) kbHomeBlock {
+	return vilHomeBlock(kb.halfFor(col), kb.rightHalfAt(row, col))
+}
+
+// rightHalfAt reports whether (row, col) is in the right half.
+func (kb *vilKeyboard) rightHalfAt(row, col int) bool {
+	if kb.halfRows > 0 {
+		return row >= kb.halfRows
+	}
+	if kb.splitCols {
+		return col >= kb.halfCols
+	}
+	return false
 }
 
 // colX returns the x offset of column col relative to the half which contains
 // it, including the home-column gap. Drawing and width both go through it.
-func (kb *vilKeyboard) colX(col, keyWidth, keyGap int) int {
+func (kb *vilKeyboard) colX(row, col, keyWidth, keyGap int) int {
 	switch {
 	case kb.splitCols:
-		return homeColX(kb.halfCols, kb.homeBlockFor(col), col%kb.halfCols, keyWidth, keyGap)
+		return homeColX(kb.halfCols, kb.homeBlockAt(row, col), col%kb.halfCols, keyWidth, keyGap)
 	case kb.halfRows > 0:
-		return homeColX(kb.maxCols, kb.homeBlockFor(col), col, keyWidth, keyGap)
+		return homeColX(kb.maxCols, kb.homeBlockAt(row, col), col, keyWidth, keyGap)
 	}
 	return col * homeGapStep(keyWidth, keyGap)
 }
@@ -536,7 +560,7 @@ func (kb *vilKeyboard) halfWidthWithGap(halfCols, keyWidth, keyGap int) int {
 	if halfCols <= 0 {
 		return 0
 	}
-	return lenWithGap(halfCols, vilHomeBlock(halfCols), keyWidth, keyGap)
+	return lenWithGap(halfCols, vilHomeBlock(halfCols, false), keyWidth, keyGap)
 }
 
 func (kb *vilKeyboard) targetHome(row, col int) (int, int, bool) {

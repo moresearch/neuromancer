@@ -127,7 +127,7 @@ func TestVilRendering(t *testing.T) {
 	}
 	// The activator (MO1) is highlighted; the home-column gap shifts it by
 	// one key cell, so use the drawing's own column offset.
-	actX := x0 + kb.colX(1, m.keyWidth, m.keyGap) + m.keyWidth/2
+	actX := x0 + kb.colX(1, 1, m.keyWidth, m.keyGap) + m.keyWidth/2
 	_, _, actStyle, _ := sim.GetContent(actX, keyY(1))
 	if _, _, actAttrs := actStyle.Decompose(); actAttrs&tcell.AttrBold == 0 {
 		t.Error("activator MO1 is not highlighted")
@@ -151,7 +151,7 @@ func TestVilRendering(t *testing.T) {
 	typ.drawKeyboard('!')
 	// The wrong key (@, column 1 of the top row) is not dimmed by the finger
 	// highlight; it is drawn with the error style.
-	_, _, errStyle, _ := sim.GetContent(x0+kb.colX(1, m.keyWidth, m.keyGap)+m.keyWidth/2, keyY(0))
+	_, _, errStyle, _ := sim.GetContent(x0+kb.colX(1, 1, m.keyWidth, m.keyGap)+m.keyWidth/2, keyY(0))
 	if _, _, errAttrs := errStyle.Decompose(); errAttrs&tcell.AttrDim != 0 {
 		t.Error("wrong key is dimmed")
 	}
@@ -508,5 +508,40 @@ func TestVilLayerHintKeepsKeyGuidance(t *testing.T) {
 
 	if got := noKeyHint(';'); !strings.Contains(got, "no key") || !strings.Contains(got, ";") {
 		t.Fatalf("missing-key hint = %q", got)
+	}
+}
+
+// The home columns are the ones the fingers rest on: a r s t on the left half
+// and n e i o on the right. The neighbouring g and m are *not* home columns.
+func TestVilHomeColumns(t *testing.T) {
+	// A Miryoku-shaped matrix if one is installed, otherwise the test fixture.
+	kb, err := loadVil("/home/maf/.config/nm/CANONICAL_ATmega_100pct_Miryoku_3x5.vil", "")
+	if err != nil || kb.halfRows == 0 {
+		kb = loadWideTestVil(t)
+	}
+
+	home := func(row, col int) bool {
+		b := kb.homeBlockAt(row, col)
+		return col >= b.start && col < b.start+b.cols
+	}
+
+	leftRow := kb.homeRow
+	for col := 0; col < kb.maxCols; col++ {
+		got := kb.actionAt(0, leftRow, col).output
+		want := strings.ContainsRune("arst", got)
+		if home(leftRow, col) != want {
+			t.Errorf("left row: %q home=%v, want %v", string(got), home(leftRow, col), want)
+		}
+	}
+	if kb.halfRows == 0 {
+		return
+	}
+	rightRow := kb.halfRows + kb.homeRow
+	for col := 0; col < kb.maxCols; col++ {
+		got := kb.actionAt(0, rightRow, col).output
+		want := strings.ContainsRune("neio", got)
+		if home(rightRow, col) != want {
+			t.Errorf("right row: %q home=%v, want %v", string(got), home(rightRow, col), want)
+		}
 	}
 }
