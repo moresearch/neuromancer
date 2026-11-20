@@ -1,11 +1,13 @@
 # Unreleased:
  - The keyboard matrix now sets the four home keys (`arst` / `oien`) apart
-   column-wise: a one-and-a-half-cell blank on each side of the block, with
-   every other column keeping the normal spacing. The columns come from the
-   physical layout, so a Vial keymap with an outer macro column keeps `arst`
-   after that macro column and `oien` inboard of it. Thumb keys move onto their
-   own row, indented inward from the outer edge, and the space bars span the
-   home block. Keys keep their size and the matrix width (and therefore text
+   column-wise: a few blank columns on each side of the block, with every other
+   column keeping the normal spacing. The columns come from the physical
+   layout, so a Vial keymap with an outer macro column keeps `arst` after that
+   macro column and `oien` inboard of it. Thumb keys keep the keymap's own
+   columns and are laid out on their own spacing, so split-keyboard thumb
+   clusters stay tucked in at each half's inner edge; the space bars sit under
+   the home block. Narrow terminals draw the halves as one block but still
+   separate them. Keys keep their size and the matrix width (and therefore text
    wrapping) accounts for the gaps. Terminals too narrow for the split layout
    draw the whole keyboard as one block at full-size caps instead of shrinking
    every key.

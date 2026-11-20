@@ -466,13 +466,36 @@ func isHomeDistance(halfCols, d int) bool {
 	return d >= 1 && d <= 4
 }
 
-// thumbColX is colX for a key on a thumb row: the thumb cluster is pulled in
-// from the outer edge so it sits under the home block.
+// thumbColX is colX for a key on a thumb row. Thumb keys do not follow the
+// home-column gap of the alpha rows: they keep the layout's own columns, laid
+// out from the start of their half, so a split keyboard's thumb clusters stay
+// where the keymap puts them (flush with the inner edge of each half).
 func (kb *vilKeyboard) thumbColX(row, col, keyWidth, keyGap int) int {
 	if !kb.isThumbRow(row) {
 		return kb.colX(col, keyWidth, keyGap)
 	}
-	return thumbX(kb.halfFor(col), kb.homeBlockFor(col), kb.colX(col, keyWidth, keyGap), keyWidth, keyGap)
+	// With rows split per half every row starts at its half's own column 0;
+	// with a column split the right half's keys start after the left half.
+	first := 0
+	if kb.halfRows == 0 && kb.splitCols && col >= kb.halfCols {
+		first = kb.halfCols
+	}
+	count := 0
+	for c := first; c < col; c++ {
+		if kb.cellPresent(row, c) {
+			count++
+		}
+	}
+	return count * homeGapStep(keyWidth, keyGap)
+}
+
+// cellPresent reports whether row has a key at col.
+func (kb *vilKeyboard) cellPresent(row, col int) bool {
+	if row < 0 || row >= len(kb.layers[0].matrix) {
+		return false
+	}
+	r := kb.layers[0].matrix[row]
+	return col >= 0 && col < len(r) && r[col] != ""
 }
 
 // halfFor returns the number of columns of the half holding matrix column col.

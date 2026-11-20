@@ -25,8 +25,8 @@ usage: nm \[OPTION\]... \[FILE\]
   of the screen. The key producing the next character is highlighted in green.
   Pressing the wrong key highlights that key's location in red. In each split
   half the four home keys (`arst` on the left, `oien` on the right) form a
-  block set off from the other columns by a wider blank on either side, so a
-  reach away from the home columns is visible at a glance.
+  block set slightly apart from the other columns, so a reach away from the
+  home columns is visible at a glance.
 
 # OPTIONS
 
@@ -306,10 +306,12 @@ are determined exclusively by the input.
   a Vial layout the block is measured from the keymap itself, so a Miryoku-style
   board with an outer macro column keeps `a r s t` after the macro column and
   `o i e n` next to the inner edge, with the macro column on the far side. The
-  thumb keys sit on their own row, indented inward from the outer edge, and the
-  space bar spans the home block, so the thumbs line up under the home fingers.
-  On a terminal too narrow for the split layout the whole keyboard is drawn as
-  one block instead of shrinking every keycap.
+  thumb keys keep the columns the keymap gives them and are laid out on their
+  own spacing, so a split keyboard's thumb clusters stay tucked in at the inner
+  edge of each half. The space bars sit under the home block, the way the space
+  keys of a Sofle do. On a terminal too narrow for the split layout the whole
+  keyboard is drawn as one block, with the halves still separated, instead of
+  shrinking every keycap.
 
   Use **-drill** to generate a test from the characters which require a
   non-base layer. Any text file can also be used as a lesson:
