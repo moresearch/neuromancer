@@ -28,7 +28,11 @@ func TestDrawChatsubo(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer sim.Fini()
-	sim.SetSize(120, 40)
+	// 120 columns fits the indented split layout inside the Chatsubo panel;
+	// a smaller terminal falls back to the single keyboard without a panel.
+	// Chatsubo needs one more column gap for the home-column gap on each
+	// half; 146 columns keeps the split layout, the panel and five-wide caps.
+	sim.SetSize(146, 40)
 
 	typ := newTestTyper(sim)
 	typ.chatsubo = newChatsubo("", "", time.Minute)

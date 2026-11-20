@@ -13,8 +13,11 @@ quotes, books, generated drills, or live coaching.
 - Built-in Colemak-DH matrix with shifted-key guidance.
 - Vial `.vil` support: layer matrices, HRMs, layer activators, automatic split
   detection, and inferred layer names (`num/sym`, `mouse`, `fn/media`, …).
+- A visible gap between the four home columns and the outer index/pointer
+  columns of each split, so reaching off home is obvious at a glance.
 - Physical layer tracking on Linux through the Vial raw HID interface: hold a
-  thumb layer key and the display switches to that layer.
+  thumb layer key and the display switches to that layer. Momentary, layer-tap,
+  toggle (`TG`), `TO`, `DF`, and tap-dance (`TD`) layer keys are all followed.
 - HRM drills (`-hrm`) and non-base-layer drills (`-drill`).
 - Optional Ollama integration:
   - `-gen` generates a practice drill from a prompt.

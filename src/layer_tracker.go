@@ -30,6 +30,18 @@ type layerTracker struct {
 	toggled      uint32
 }
 
+// reset forgets every held/toggled layer so the next draw falls back to the
+// target layer. It is used when tracking stops: after a disconnect the last
+// held layer would otherwise stay on screen forever.
+func (t *layerTracker) reset() {
+	t.mu.Lock()
+	t.prevPressed = nil
+	t.pressedSince = nil
+	t.toggled = 0
+	t.mu.Unlock()
+	t.setLayer(-1)
+}
+
 func (t *layerTracker) Layer() int {
 	t.mu.Lock()
 	layer := t.layer
@@ -79,9 +91,26 @@ func (t *layerTracker) pressedFromState(state []byte) map[[2]int]bool {
 	return pressed
 }
 
+// layerBit returns the bitmask bit for a layer, or 0 when the layer does not
+// exist in this layout. The mask is keyed by the 1-based layer index, and
+// layer 0 (base) is expressed by "no bit set".
+func (t *layerTracker) layerBit(layer int) uint32 {
+	if t.kb == nil || layer <= 0 || layer >= len(t.kb.layers) || layer >= 32 {
+		// The toggled mask is a uint32, so layers past 31 (already impossible
+		// for a real VIA keyboard: the matrix reports 5-bit layer codes) are
+		// rejected rather than silently wrapping onto a different layer.
+		return 0
+	}
+	return 1 << uint(layer)
+}
+
 // updateActive turns the pressed matrix cells into the highest active layer.
 // Momentary layer keys (MO/LT/OSL/TT/LM) count while held; TG/TO/DF are tracked
 // as toggles.
+//
+// The momentary activators and the selection loop below share one invariant:
+// the bitmask is keyed by the 1-based layer index, so a key for layer n sets
+// bit n and the loop scans bits 1..len(layers)-1. Do not shift one side only.
 func (t *layerTracker) updateActive(pressed map[[2]int]bool) {
 	if t.kb == nil || len(t.kb.layers) == 0 {
 		t.setLayer(-1)
@@ -102,15 +131,17 @@ func (t *layerTracker) updateActive(pressed map[[2]int]bool) {
 		a := t.kb.actionAt(0, pos[0], pos[1])
 		switch a.layerMode {
 		case "TG":
-			if a.layer > 0 {
-				t.toggled ^= 1 << uint(a.layer)
+			if bit := t.layerBit(a.layer); bit != 0 {
+				t.toggled ^= bit
 			}
 		case "TO":
-			if a.layer > 0 {
-				t.toggled = 1 << uint(a.layer)
+			if bit := t.layerBit(a.layer); bit != 0 {
+				t.toggled = bit
 			}
 		case "DF":
-			t.toggled = 0
+			// DF(n) makes layer n the base of the active stack: n selects
+			// only n, and DF(0) returns to the base layer.
+			t.toggled = t.layerBit(a.layer)
 		}
 	}
 
@@ -138,14 +169,12 @@ func (t *layerTracker) updateActive(pressed map[[2]int]bool) {
 		a := t.kb.actionAt(0, pos[0], pos[1])
 		switch a.layerMode {
 		case "MO", "OSL", "LM":
-			if a.layer > 0 {
-				active |= 1 << uint(a.layer)
-			}
+			active |= t.layerBit(a.layer)
 		case "LT", "TT":
 			if a.layer > 0 {
 				since := t.pressedSince[pos]
 				if hasOtherKey || now.Sub(since) >= layerTapDelay {
-					active |= 1 << uint(a.layer)
+					active |= t.layerBit(a.layer)
 				}
 			}
 		}

@@ -123,17 +123,24 @@ func chooseKeyMetrics(rows, screenHeight, bottomPad, minTextRows int) (keyH, row
 func kbBuiltinMetrics(screenWidth, screenHeight, splitGap int) (kbMetrics, bool) {
 	keyWidth := 0
 	split := false
+	// Prefer full-size caps on the single keyboard, then the split layout at
+	// full size, and only then shrink the caps to keep the split.
 	for kw := 5; kw >= 1; kw-- {
+		if kbWidth(kw, kbKeyGap)+2 <= screenWidth {
+			keyWidth = kw
+			break
+		}
 		if kbSplitWidth(kw, kbKeyGap, splitGap)+2 <= screenWidth {
 			keyWidth = kw
 			split = true
 			break
 		}
 	}
-	if keyWidth == 0 {
-		for kw := 5; kw >= 1; kw-- {
-			if kbWidth(kw, kbKeyGap)+2 <= screenWidth {
+	if keyWidth == 0 && screenWidth >= kbWideScreen {
+		for kw := 4; kw >= 1; kw-- {
+			if kbSplitWidth(kw, kbKeyGap, splitGap)+2 <= screenWidth {
 				keyWidth = kw
+				split = true
 				break
 			}
 		}
@@ -207,11 +214,19 @@ func (t *typer) keyboardWidth(m kbMetrics) int {
 	if t.vil != nil {
 		return t.vil.width(m.keyWidth, m.keyGap, m.splitGap)
 	}
-	sw, _ := t.Scr.Size()
-	if kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)+2 <= sw {
+	if t.builtinSplit(m) {
 		return kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
 	}
 	return kbWidth(m.keyWidth, m.keyGap)
+}
+
+// builtinSplit reports whether the built-in matrix is drawn as two halves. The
+// split layout keeps full-size caps on wide terminals even when there is no
+// room for it, so this cannot be decided from the widths alone.
+func (t *typer) builtinSplit(m kbMetrics) bool {
+	sw, _ := t.Scr.Size()
+	return kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)+2 <= sw ||
+		(sw >= kbWideScreen && kbWidth(m.keyWidth, m.keyGap)+2 <= sw)
 }
 
 func (t *typer) keyboardMetrics() (kbMetrics, bool) {
@@ -408,8 +423,32 @@ func kbSplitMaxOffset(keyWidth int) int {
 	return max
 }
 
+// homeGapCells is the blank gap, in key cells, placed between each split's
+// outer (index/pointer) column and its four home columns. In cell units the
+// gap is keyWidth+keyGap wide, i.e. one extra column step.
+const homeGapCells = 1
+
+// kbLeftHomeCol and kbRightHomeCol are the first home column of each built-in
+// half. The left half keeps one outer column (q), the right half keeps four
+// (l, u, y, ;) because it has eight columns. This matches isHomeDistance,
+// which calls distance 1..4 from the inner edge the home columns.
+const (
+	kbLeftHomeCol  = 1
+	kbRightHomeCol = 4
+)
+
+// homeGapX is the extra horizontal offset of column col inside a half whose
+// first home column is homeCol: the single gap, when the gap precedes col.
+func homeGapX(col, homeCol, keyWidth, keyGap int) int {
+	if col < homeCol {
+		return 0
+	}
+	return homeGapCells * (keyWidth + keyGap)
+}
+
 func kbSplitLeftWidth(keyWidth, keyGap int) int {
-	return kbSplitMaxOffset(keyWidth) + kbSplitCol*keyWidth + (kbSplitCol-1)*keyGap
+	return kbSplitMaxOffset(keyWidth) + (kbSplitCol+homeGapCells)*keyWidth +
+		(kbSplitCol-1+homeGapCells)*keyGap
 }
 
 func kbSplitRightWidth(keyWidth, keyGap int) int {
@@ -422,7 +461,27 @@ func kbSplitRightWidth(keyWidth, keyGap int) int {
 	if max == 0 {
 		return 0
 	}
-	return max*keyWidth + (max-1)*keyGap
+	// The right half has one more cell for the home-column gap.
+	return (max+homeGapCells)*keyWidth + (max-1+homeGapCells)*keyGap
+}
+
+// kbSplitKeyX returns the x offset of key col (relative to the split's own
+// origin) and whether the key is in the right half. The home-column gap is
+// included, so drawing, widths and hit positions all agree.
+func kbSplitKeyX(col, keyWidth, keyGap int) (x int, right bool) {
+	if col < 0 {
+		return 0, false
+	}
+	if col < kbSplitCol {
+		return col*(keyWidth+keyGap) + homeGapX(col, kbLeftHomeCol, keyWidth, keyGap), false
+	}
+	max := 0
+	for _, row := range kbRows {
+		if n := len(row.keys) - kbSplitCol; n > max {
+			max = n
+		}
+	}
+	return (col-kbSplitCol)*(keyWidth+keyGap) + homeGapX(col-kbSplitCol, kbRightHomeCol, keyWidth, keyGap), true
 }
 
 func kbSplitWidth(keyWidth, keyGap, splitGap int) int {
@@ -462,7 +521,7 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 		return
 	}
 
-	split := kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)+2 <= sw
+	split := t.builtinSplit(m)
 	width := kbWidth(m.keyWidth, m.keyGap)
 	leftWidth := 0
 	if split {
@@ -515,11 +574,15 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 			x := x0 + offset + j*(m.keyWidth+m.keyGap)
 			focused := true
 			if split {
-				if j < kbSplitCol {
-					focused = focusLeft
-				} else {
-					x = x0 + leftWidth + m.splitGap + (j-kbSplitCol)*(m.keyWidth+m.keyGap)
+				var gx int
+				var right bool
+				gx, right = kbSplitKeyX(j, m.keyWidth, m.keyGap)
+				if right {
+					x = x0 + leftWidth + m.splitGap + gx
 					focused = focusRight
+				} else {
+					x = x0 + gx
+					focused = focusLeft
 				}
 			}
 

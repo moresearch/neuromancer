@@ -23,7 +23,10 @@ usage: nm \[OPTION\]... \[FILE\]
 
   While a test is running the Colemak-DH (matrix) layout is shown at the bottom
   of the screen. The key producing the next character is highlighted in green.
-  Pressing the wrong key highlights that key's location in red.
+  Pressing the wrong key highlights that key's location in red. The four home
+  columns of each split are separated from the outer index/pointer column by one
+  extra blank cell, so a reach away from the home columns is visible at a
+  glance.
 
 # OPTIONS
 
@@ -66,7 +69,7 @@ usage: nm \[OPTION\]... \[FILE\]
 
 -layer-track
 
-: Follow physical layer keys by polling the Vial raw HID switch matrix on Linux. Enabled by default; use **-layer-track=false** to disable. Set `NM_HIDRAW=/dev/hidrawN` to choose the device, which must be readable/writable by your user and unlocked in Vial.
+: Follow physical layer keys by polling the Vial raw HID switch matrix on Linux. Enabled by default; use **-layer-track=false** to disable. Set `NM_HIDRAW=/dev/hidrawN` to choose the device, which must be readable/writable by your user and unlocked in Vial. Momentary keys (MO, LT, OSL, LM, TT) count while held, holding a layer-tap key long enough (or pressing another key while it is down) activates its layer, and TG/TO/DF are tracked as toggles, with the highest active layer shown. A `TD(n)` tap-dance whose hold action is a layer key counts as that layer. When tracking stops or a test ends the display falls back to the layer required by the next character.
 
 -books *DIR*
 
@@ -242,7 +245,13 @@ are determined exclusively by the input.
   Use **-vil-info** to print the parsed matrix and every layer, then exit. Both
   string and numeric QMK keycodes are accepted, and flat Sofle/Corne `LAYOUT`
   lists are arranged into the split matrix. While typing, **F1**/**F2** preview
-  the next/previous layer and **F3** returns to automatic layer selection.
+  the next/previous layer and **F3** returns to automatic layer selection. A
+  preview wins over a physically held layer, so browsing layers with the function
+  keys is never ignored.
+
+  Tap dances stored as `{"tap": ..., "hold": ...}` objects are understood, so a
+  `TD(n)` whose hold action is `MO`, `LT`, `OSL`, or similar activates that layer
+  in the same way a direct layer key does.
 
   Home Row Mods are recognized from `LCTL_T`, `LSFT_T`, `LALT_T`, `LGUI_T`,
   `MT(...)`, and their numeric equivalents. Keycaps show both parts, like Vial:
@@ -289,6 +298,12 @@ are determined exclusively by the input.
   draws keys as beveled button keycaps, keeps a wide gap between the halves,
   and leaves padding below the keyboard. Terminal font size itself is
   controlled by your terminal emulator.
+
+  Within each half, the four home columns are separated from the outer
+  index/pointer columns by one extra blank cell. The boundary uses the same rule
+  as the dim green home tint, so the gap and the tint always agree. On a
+  terminal too narrow for the split layout the whole keyboard is drawn as one
+  block instead of shrinking every keycap.
 
   Use **-drill** to generate a test from the characters which require a
   non-base layer. Any text file can also be used as a lesson:

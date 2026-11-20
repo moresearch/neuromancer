@@ -16,8 +16,8 @@ import (
 // Vial stores a keymap as a stack of 2D matrices. Each cell is a QMK keycode
 // string such as "KC_Q", "MO(2)", "LT(1,KC_SPC)" or -1 for a missing key.
 type vilFile struct {
-	Layout   []interface{}   `json:"layout"`
-	TapDance [][]interface{} `json:"tap_dance"`
+	Layout   []interface{} `json:"layout"`
+	TapDance []interface{} `json:"tap_dance"`
 }
 
 type vilAction struct {
@@ -43,7 +43,7 @@ type vilKeyboard struct {
 	name       string
 	layers     []*vilLayer
 	layerNames []string
-	tapDances  []string
+	tapDances  []tapDance
 	halfRows   int
 	halfCols   int
 	splitCols  bool
@@ -466,6 +466,47 @@ func isHomeDistance(halfCols, d int) bool {
 	return d >= 1 && d <= 4
 }
 
+// gapCols returns the number of columns in the outer block of a half of
+// halfCols columns. The four innermost columns are home columns, so a half of
+// five or more columns keeps halfCols-4 outer columns; a half which is all
+// home keys gets no gap at all (no distinct home block).
+func gapCols(halfCols int) int {
+	if halfCols > 4 {
+		return halfCols - 4
+	}
+	return -1
+}
+
+// colX returns the x offset of column col relative to the half which contains
+// it, including the home-column gap. Drawing and width both go through it.
+func (kb *vilKeyboard) colX(col, keyWidth, keyGap int) int {
+	var halfCols int
+	switch {
+	case kb.splitCols:
+		halfCols = kb.halfCols
+		col -= (col / kb.halfCols) * kb.halfCols
+	case kb.halfRows > 0:
+		halfCols = kb.maxCols
+	}
+	outer := gapCols(halfCols)
+	if outer > 0 && col >= outer {
+		return (col + homeGapCells) * (keyWidth + keyGap)
+	}
+	return col * (keyWidth + keyGap)
+}
+
+func (kb *vilKeyboard) halfWidthWithGap(halfCols, keyWidth, keyGap int) int {
+	if halfCols <= 0 {
+		return 0
+	}
+	// Same gap rule as colX: only a half with an outer block gets a gap.
+	cols := halfCols
+	if gapCols(halfCols) > 0 {
+		cols += homeGapCells
+	}
+	return cols*keyWidth + (cols-1)*keyGap
+}
+
 func (kb *vilKeyboard) targetHome(row, col int) (int, int, bool) {
 	if kb.isThumbRow(row) {
 		if kb.halfRows >= 4 {
@@ -637,12 +678,25 @@ func vilCellString(v interface{}) string {
 	return ""
 }
 
-func parseVilTapDances(raw [][]interface{}) []string {
-	out := make([]string, len(raw))
+// tapDance is one entry of the .vil tap_dance array. Vial writes either the
+// tap action on its own or a {"tap": ..., "hold": ...} object.
+type tapDance struct {
+	tap  string
+	hold string
+}
+
+func parseVilTapDances(raw []interface{}) []tapDance {
+	out := make([]tapDance, len(raw))
 	for i, td := range raw {
-		if len(td) > 0 {
-			if s, ok := td[0].(string); ok {
-				out[i] = s
+		switch x := td.(type) {
+		case string:
+			out[i].tap = strings.TrimSpace(x)
+		case map[string]interface{}:
+			if tap, ok := x["tap"].(string); ok {
+				out[i].tap = strings.TrimSpace(tap)
+			}
+			if hold, ok := x["hold"].(string); ok {
+				out[i].hold = strings.TrimSpace(hold)
 			}
 		}
 	}
@@ -667,7 +721,23 @@ func parseVilCall(raw string) (name string, args []string, ok bool) {
 	return name, args, true
 }
 
-func parseVilKey(raw string, tapDances []string, depth int) vilAction {
+// withTapDanceHold fills in the layer action of a tap-dance whose hold action
+// is a layer key, e.g. {"tap": "KC_A", "hold": "MO(2)"}. Without it the key is
+// treated as an ordinary key and its layer would never activate.
+func withTapDanceHold(td vilAction, hold string, tapDances []tapDance, depth int) vilAction {
+	if hold == "" {
+		return td
+	}
+	h := parseVilKey(hold, tapDances, depth+1)
+	if h.layerMode == "" || h.layer <= 0 {
+		return td
+	}
+	td.layer = h.layer
+	td.layerMode = h.layerMode
+	return td
+}
+
+func parseVilKey(raw string, tapDances []tapDance, depth int) vilAction {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "-1" {
 		return vilAction{raw: raw, none: true}
@@ -754,8 +824,12 @@ func parseVilKey(raw string, tapDances []string, depth int) vilAction {
 			}
 		case "TD":
 			if len(args) == 1 && depth < 8 {
-				if n, err := strconv.Atoi(args[0]); err == nil && n >= 0 && n < len(tapDances) && tapDances[n] != "" {
-					td := parseVilKey(tapDances[n], tapDances, depth+1)
+				if n, err := strconv.Atoi(args[0]); err == nil && n >= 0 && n < len(tapDances) && tapDances[n].tap != "" {
+					dance := tapDances[n]
+					td := parseVilKey(dance.tap, tapDances, depth+1)
+					if td.layerMode == "" {
+						td = withTapDanceHold(td, dance.hold, tapDances, depth)
+					}
 					td.raw = raw
 					if td.label == "" {
 						td.label = fmt.Sprintf("TD%d", n)
@@ -1339,13 +1413,15 @@ func (kb *vilKeyboard) halfWidth(keyWidth, keyGap int) int {
 
 func (kb *vilKeyboard) width(keyWidth, keyGap, splitGap int) int {
 	if kb.splitCols {
-		leftWidth := kb.halfCols*keyWidth + (kb.halfCols-1)*keyGap
-		rightCols := kb.maxCols - kb.halfCols
-		rightWidth := rightCols*keyWidth + (rightCols-1)*keyGap
+		leftWidth := kb.halfWidthWithGap(kb.halfCols, keyWidth, keyGap)
+		rightWidth := kb.halfWidthWithGap(kb.maxCols-kb.halfCols, keyWidth, keyGap)
 		return leftWidth + splitGap + rightWidth
 	}
 
-	half := kb.halfWidth(keyWidth, keyGap)
+	half := kb.halfWidthWithGap(kb.maxCols, keyWidth, keyGap)
+	if half == 0 {
+		half = kb.halfWidth(keyWidth, keyGap)
+	}
 	if kb.halfRows > 0 {
 		return 2*half + splitGap
 	}
@@ -1687,13 +1763,16 @@ func (t *typer) drawVilKeyboard(target rune) {
 		}
 	}
 	physical := physicalLayer >= 0
-	preview := !physical && t.previewLayer >= 0 && t.previewLayer < len(kb.layers)
+	// F1/F2/F3 previews win over a physically held layer, so browsing another
+	// layer with the keyboard never silently does nothing. The hint still says
+	// which layer is held.
+	preview := t.previewLayer >= 0 && t.previewLayer < len(kb.layers)
 	layer := 0
 	switch {
-	case physical:
-		layer = physicalLayer
 	case preview:
 		layer = t.previewLayer
+	case physical:
+		layer = physicalLayer
 	case found:
 		layer = hint.layer
 	}
@@ -1711,7 +1790,7 @@ func (t *typer) drawVilKeyboard(target rune) {
 	}
 
 	showTarget := found && (!preview || hint.layer == layer)
-	if physical {
+	if physical && !preview {
 		showTarget = found && hint.layer == layer
 	}
 
@@ -1750,12 +1829,12 @@ func (t *typer) drawVilKeyboard(target rune) {
 
 		switch {
 		case kb.splitCols:
-			leftWidth := kb.halfCols*m.keyWidth + (kb.halfCols-1)*m.keyGap
+			leftWidth := kb.halfWidthWithGap(kb.halfCols, m.keyWidth, m.keyGap)
 			kb.drawCols(t.Scr, layer, r, 0, kb.halfCols, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 			kb.drawCols(t.Scr, layer, r, kb.halfCols, kb.maxCols,
 				x0+leftWidth+m.splitGap, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 		case kb.halfRows > 0:
-			leftWidth := kb.halfWidth(m.keyWidth, m.keyGap)
+			leftWidth := kb.halfWidthWithGap(kb.maxCols, m.keyWidth, m.keyGap)
 			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 			if r+kb.halfRows < len(kb.layers[0].matrix) {
 				kb.drawHalf(t.Scr, layer, r+kb.halfRows,
@@ -1770,10 +1849,10 @@ func (t *typer) drawVilKeyboard(target rune) {
 	hintY := m.top + rows*m.keyH + (rows-1)*m.rowGap
 	hintText := kb.hintText(hint, found)
 	switch {
-	case physical:
-		hintText = kb.hintForLayer("held", layer, target)
 	case preview:
 		hintText = kb.hintForLayer("preview", layer, target)
+	case physical:
+		hintText = kb.hintForLayer("held", layer, target)
 	default:
 		if !found {
 			hintText = noKeyHint(target)
@@ -1872,6 +1951,6 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 			border = border.Dim(true)
 		}
 
-		drawKBButton(scr, x+(col-startCol)*(keyWidth+keyGap), y, keyWidth, keyH, label, top, style, border)
+		drawKBButton(scr, x+kb.colX(col, keyWidth, keyGap), y, keyWidth, keyH, label, top, style, border)
 	}
 }

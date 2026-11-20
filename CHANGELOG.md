@@ -1,4 +1,15 @@
 # Unreleased:
+ - The keyboard matrix now draws a blank home-column gap: on each split half the
+   four home columns are separated from the outer index/pointer columns by one
+   extra cell. Keys keep their size and the matrix width (and therefore text
+   wrapping) accounts for the gap. Terminals too narrow for the split layout
+   draw the whole keyboard as one block at full-size caps instead of shrinking
+   every key.
+ - Layer keys: a `TD(n)` tap-dance whose hold action is a layer key now
+   activates its layer, `DF(n)` for `n > 0` selects layer `n` (it used to clear
+   all toggles), layer numbers outside the layout are ignored, `F1`/`F2`
+   previews take precedence over a physically held layer, and a held layer is
+   cleared when tracking stops or a test ends.
  - Book mode now uses Ollama by default: each sprint types a one-sentence
    summary (20 words max) of a random paragraph. The text is rendered inside the
    Chatsubo panel between the keyboard halves. A small summary queue is

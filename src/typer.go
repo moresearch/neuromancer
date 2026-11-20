@@ -412,6 +412,13 @@ func (t *typer) paintPanelStats(x, row, maxCols int, segs []statsSeg) bool {
 
 func (t *typer) Start(text []segment, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, rc int, mistakes []mistake) {
 	timeLeft := timeout
+	// A run ends with (or without) a layer still held: fall back to the target
+	// layer so the results screen never shows a physically-held layer.
+	defer func() {
+		if t.layerTracker != nil {
+			t.layerTracker.reset()
+		}
+	}()
 
 	for i, s := range text {
 		startImmediately := true

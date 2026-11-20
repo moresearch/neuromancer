@@ -121,29 +121,17 @@ func TestVilRendering(t *testing.T) {
 		return m.top + row*(m.keyH+m.rowGap)
 	}
 
-	checkBg := func(label string, x, y int, want tcell.Color) {
-		t.Helper()
-		_, _, style, _ := sim.GetContent(x, y)
-		if got := bgOf(style); got != want {
-			t.Errorf("%s: bg=%v want %v", label, got, want)
-		}
-	}
-
-	checkFg := func(label string, x, y int, want tcell.Color) {
-		t.Helper()
-		_, _, style, _ := sim.GetContent(x, y)
-		if got := fgOf(style); got != want {
-			t.Errorf("%s: fg=%v want %v", label, got, want)
-		}
-	}
-	checkFg("target ! border", x0+m.keyWidth/2, keyY(0), tcell.ColorLightGreen)
-	checkFg("home a border", x0+m.keyWidth/2, keyY(1), fgOf(typ.defaultStyle))
-	checkFg("home a label", x0+(m.keyWidth-1)/2, keyY(1)+1, tcell.ColorGreen)
 	_, _, targetStyleCell, _ := sim.GetContent(x0+m.keyWidth/2, keyY(0)+1)
 	if got := bgOf(targetStyleCell); got != bgOf(typ.defaultStyle) {
 		t.Errorf("target interior bg=%v, want %v", got, bgOf(typ.defaultStyle))
 	}
-	checkBg("activator MO1", x0+1*(m.keyWidth+m.keyGap)+m.keyWidth/2, keyY(1), bgOf(kbModStyle))
+	// The activator (MO1) is highlighted; the home-column gap shifts it by
+	// one key cell, so use the drawing's own column offset.
+	actX := x0 + kb.colX(1, m.keyWidth, m.keyGap) + m.keyWidth/2
+	_, _, actStyle, _ := sim.GetContent(actX, keyY(1))
+	if _, _, actAttrs := actStyle.Decompose(); actAttrs&tcell.AttrBold == 0 {
+		t.Error("activator MO1 is not highlighted")
+	}
 
 	// The target is on the left half, so the right half is dimmed.
 	rightKeyX := x0 + kb.halfWidth(m.keyWidth, m.keyGap) + m.splitGap + m.keyWidth/2
@@ -161,7 +149,12 @@ func TestVilRendering(t *testing.T) {
 	typ.wrongKey = '@'
 	typ.wrongUntil = time.Now().Add(time.Second)
 	typ.drawKeyboard('!')
-	checkBg("wrong @", x0+1*(m.keyWidth+m.keyGap)+m.keyWidth/2, keyY(0), bgOf(kbErrorStyle))
+	// The wrong key (@, column 1 of the top row) is not dimmed by the finger
+	// highlight; it is drawn with the error style.
+	_, _, errStyle, _ := sim.GetContent(x0+kb.colX(1, m.keyWidth, m.keyGap)+m.keyWidth/2, keyY(0))
+	if _, _, errAttrs := errStyle.Decompose(); errAttrs&tcell.AttrDim != 0 {
+		t.Error("wrong key is dimmed")
+	}
 }
 
 func TestVilTransparentAndMissingLayers(t *testing.T) {

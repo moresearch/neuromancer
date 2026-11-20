@@ -163,6 +163,7 @@ func (t *layerTracker) Close() {
 	t.closeOnce.Do(func() {
 		close(t.stop)
 		<-t.done
+		t.reset()
 		if t.fd >= 0 {
 			unix.Close(t.fd)
 			t.fd = -1

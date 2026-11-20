@@ -301,7 +301,7 @@ func (t *typer) chatPanelGap(m kbMetrics) (int, bool) {
 		x0 := (sw - width) / 2
 		switch {
 		case kb.splitCols:
-			left := kb.halfCols*m.keyWidth + (kb.halfCols-1)*m.keyGap
+			left := kb.halfWidth(m.keyWidth, m.keyGap)
 			return x0 + left, true
 		case kb.halfRows > 0:
 			left := kb.halfWidth(m.keyWidth, m.keyGap)
@@ -310,7 +310,7 @@ func (t *typer) chatPanelGap(m kbMetrics) (int, bool) {
 		return 0, false
 	}
 
-	if kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)+2 > sw {
+	if !t.builtinSplit(m) {
 		return 0, false
 	}
 	width := kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
