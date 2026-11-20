@@ -656,6 +656,15 @@ func (kb *vilKeyboard) isHomeKey(row, col int) bool {
 	return false
 }
 
+// thumbRowAt reports whether matrix row row is the thumb row, which is drawn a
+// line below the alpha rows so the thumbs read as a separate cluster.
+func (kb *vilKeyboard) thumbRowAt(row int) bool {
+	if row < 0 || row != kb.displayRows()-1 {
+		return false
+	}
+	return kb.isThumbRow(row)
+}
+
 func (kb *vilKeyboard) isThumbRow(row int) bool {
 	if kb.halfRows > 0 {
 		if kb.halfRows < 4 {
@@ -1514,7 +1523,7 @@ func (kb *vilKeyboard) metrics(screenWidth, screenHeight, splitGap int) (kbMetri
 	}
 
 	keyH, rowGap := chooseKeyMetrics(rows, screenHeight, vilBottomPad, vilMinTextRows)
-	keyArea := rows*keyH + (rows-1)*rowGap
+	keyArea := gridHeight(rows, keyH, rowGap, true)
 	height := keyArea + 1 + vilBottomPad
 	top := screenHeight - height
 	if top < 2 {
@@ -1866,7 +1875,7 @@ func (t *typer) drawVilKeyboard(target rune) {
 	// Clear the whole matrix before drawing. Layers can differ in which cells
 	// are absent, and a cell that is empty in the new layer must not keep the
 	// old layer's label.
-	for y := m.top; y < m.top+rows*(m.keyH+m.rowGap); y++ {
+	for y := m.top; y < m.top+gridHeight(rows, m.keyH, m.rowGap, true); y++ {
 		for x := x0; x < x0+width; x++ {
 			t.Scr.SetContent(x, y, ' ', nil, t.defaultStyle)
 		}
@@ -1881,7 +1890,7 @@ func (t *typer) drawVilKeyboard(target rune) {
 
 	rawLayer := physical || preview
 	for r := 0; r < rows; r++ {
-		y := m.top + r*(m.keyH+m.rowGap)
+		y := rowY(m.top, r, m.keyH, m.rowGap, kb.thumbRowAt(r))
 
 		switch {
 		case kb.splitCols:
@@ -1902,7 +1911,7 @@ func (t *typer) drawVilKeyboard(target rune) {
 		}
 	}
 
-	hintY := m.top + rows*m.keyH + (rows-1)*m.rowGap
+	hintY := m.top + gridHeight(rows, m.keyH, m.rowGap, true)
 	hintText := kb.hintText(hint, found)
 	switch {
 	case preview:

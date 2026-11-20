@@ -344,21 +344,22 @@ func TestVilHomeGap(t *testing.T) {
 		t.Fatalf("block %+v does not frame the home columns", leftBlock)
 	}
 
-	// Every key is drawn as "╭…╮"; record each cap's left edge on row 0.
-	var caps []int
-	open := false
-	for x := 0; x < sw; x++ {
-		ch, _, _, _ := sim.GetContent(x, m.top)
-		if ch == '╭' && !open {
-			caps = append(caps, x)
-			open = true
+	// Read each key's left edge from the drawing geometry. The cap style
+	// depends on the terminal height (rounded caps or two-row pills), so the
+	// screen is not a reliable source for the column positions.
+	keyXs := func(row int) []int {
+		var xs []int
+		for col := 0; col < kb.maxCols; col++ {
+			if kb.layers[0].matrix[row][col] == "" {
+				continue
+			}
+			xs = append(xs, kb.colX(row, col, m.keyWidth, m.keyGap))
 		}
-		if ch == '╮' {
-			open = false
-		}
+		return xs
 	}
+	caps := keyXs(0)
 	if len(caps) != 2*kb.halfCols {
-		t.Fatalf("found %d keycaps, want %d: %v", len(caps), 2*kb.halfCols, caps)
+		t.Fatalf("found %d keys, want %d: %v", len(caps), 2*kb.halfCols, caps)
 	}
 
 	step := m.keyWidth + m.keyGap

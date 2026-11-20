@@ -109,9 +109,36 @@ func kbFind(r rune) (row, col int, ok bool) {
 	return 0, 0, false
 }
 
+// thumbRowGap is the blank line between the alpha rows and the thumb row, so
+// the thumb keys read as a separate cluster.
+const thumbRowGap = 1
+
+// rowY is the top of display row r, with the thumb row pushed down by
+// thumbRowGap.
+func rowY(top, r, keyH, rowGap int, thumbRow bool) int {
+	y := top + r*(keyH+rowGap)
+	if thumbRow {
+		y += thumbRowGap
+	}
+	return y
+}
+
+// gridHeight is the height of rows key rows, or rows-1 rows when the last of
+// them is a thumb row drawn further down.
+func gridHeight(rows, keyH, rowGap int, thumbRow bool) int {
+	if rows <= 0 {
+		return 0
+	}
+	h := rows*keyH + (rows-1)*rowGap
+	if thumbRow {
+		h += thumbRowGap
+	}
+	return h
+}
+
 func chooseKeyMetrics(rows, screenHeight, bottomPad, minTextRows int) (keyH, rowGap int) {
 	for h := 3; h >= 1; h -= 2 {
-		keyArea := rows * h
+		keyArea := rows*h + thumbRowGap
 		height := keyArea + 1 + bottomPad
 		if screenHeight-height-1 >= minTextRows {
 			return h, 0
@@ -157,7 +184,7 @@ func kbBuiltinMetrics(screenWidth, screenHeight, splitGap int) (kbMetrics, bool)
 
 	rows := len(kbRows) + 1 // four key rows plus the space row
 	keyH, rowGap := chooseKeyMetrics(rows, screenHeight, kbBottomPad, kbMinTextRows)
-	keyArea := rows*keyH + (rows-1)*rowGap
+	keyArea := gridHeight(rows, keyH, rowGap, true)
 	height := keyArea + 1 + kbBottomPad
 	top := screenHeight - height
 	if top < 2 {
@@ -663,7 +690,7 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 	}
 
 	for i, row := range kbRows {
-		y := m.top + i*(m.keyH+m.rowGap)
+		y := rowY(m.top, i, m.keyH, m.rowGap, false)
 		offset := kbOffset(i, m.keyWidth)
 
 		for j, ch := range row.keys {
@@ -712,7 +739,7 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 		}
 	}
 
-	spaceY := m.top + len(kbRows)*(m.keyH+m.rowGap)
+	spaceY := rowY(m.top, len(kbRows), m.keyH, m.rowGap, true)
 
 	if split {
 		// Each thumb bar sits under its half's home block, aligned with the
