@@ -220,11 +220,14 @@ const fullHalfGap = 2
 // kbFullKeyX returns the x offset of column col when the matrix is drawn as a
 // single block: the left half, a small gap, then the right half.
 func kbFullKeyX(col, keyWidth, keyGap int) int {
+	// The left half is kbHalfCols wide, matching kbSplitLeftWidth; using the
+	// split column here made the single-block layout disagree with the split
+	// one about where the right half starts.
 	if col < kbSplitCol {
-		return homeColX(kbSplitCol, kbLeftHome, col, keyWidth, keyGap)
+		return homeColX(kbHalfCols, kbLeftHome, col, keyWidth, keyGap)
 	}
 	rightCols := len(kbRows[0].keys) - kbSplitCol
-	return lenWithGap(kbSplitCol, kbLeftHome, keyWidth, keyGap) + fullHalfGap +
+	return lenWithGap(kbHalfCols, kbLeftHome, keyWidth, keyGap) + fullHalfGap +
 		homeColX(rightCols, kbRightHome, col-kbSplitCol, keyWidth, keyGap)
 }
 
@@ -450,18 +453,23 @@ func kbSplitMaxOffset(keyWidth int) int {
 	return max
 }
 
-// homeGapExtra is the blank space of a home gap on top of the normal key gap.
-// The rest of the board is packed tight, so this is what sets the home cluster
-// apart; it is wide enough to read as a cluster boundary at a glance.
-const homeGapExtra = 3
+// The home gap is measured as a fraction of a key column, not as a fixed
+// number of cells: a column count that ignores the cap width vanishes next to
+// wide caps (four blank cells beside an eight-wide key is ordinary letter
+// spacing, not a gap).
+const (
+	homeGapNumer = 1
+	homeGapDenom = 2
+)
 
 // homeGapStep returns the step of one key column.
 func homeGapStep(keyWidth, keyGap int) int { return keyWidth + keyGap }
 
 // homeGapXIn returns the blank space taken by one home gap: the normal gap
-// between keys plus a few extra columns.
+// between keys plus half a key column, so the cluster reads as separated at
+// any cap size.
 func homeGapXIn(keyWidth, keyGap int) int {
-	return keyGap + homeGapExtra
+	return keyGap + homeGapNumer*homeGapStep(keyWidth, keyGap)/homeGapDenom
 }
 
 // kbHomeBlock describes the four home columns (a r s t / n e i o) of one half
@@ -477,8 +485,8 @@ type kbHomeBlock struct {
 //	key a r s t g   m n e i o  '
 //
 // so a r s t are the left half's columns 0..3 and n e i o the right half's
-// columns 1..4. The left block starts at column 0, so only its far side is
-// opened up; the right block has columns on both sides.
+// columns 1..4. Both blocks are padded on every side, including the outer edge
+// of the left block, which has no column to its left to hold a gap.
 var (
 	kbLeftHome  = kbHomeBlock{start: 0, cols: 4, before: true, after: true}
 	kbRightHome = kbHomeBlock{start: 1, cols: 4, before: true, after: true}
@@ -490,6 +498,8 @@ func halfBlock(halfCols int, block kbHomeBlock) (kbHomeBlock, bool) {
 	if block.cols == 0 || block.start+block.cols > halfCols {
 		return kbHomeBlock{start: 0, cols: halfCols}, false
 	}
+	// before/after describe padding, not the existence of a neighbouring
+	// column: a block starting at column 0 is still padded on its outer side.
 	block.after = block.after && block.start+block.cols < halfCols
 	return block, true
 }

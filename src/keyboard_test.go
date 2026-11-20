@@ -384,3 +384,61 @@ func TestVilHomeGap(t *testing.T) {
 	check("left", caps[:kb.halfCols], leftBlock)
 	check("right", caps[kb.halfCols:], rightBlock)
 }
+
+// The home gap is a fraction of a key column, so it stays visible whatever the
+// cap size; a fixed column count disappears next to wide caps.
+func TestHomeGapScales(t *testing.T) {
+	// Integer halves repeat on even widths, so the gap must never shrink.
+	prev := 0
+	for kw := 1; kw <= 10; kw++ {
+		g := homeGapXIn(kw, 1)
+		if g < prev {
+			t.Errorf("homeGapXIn(%d) = %d, smaller than %d", kw, g, prev)
+		}
+		prev = g
+	}
+	if homeGapXIn(10, 1) <= homeGapXIn(4, 1) {
+		t.Errorf("the gap does not grow with the cap width")
+	}
+	// At least half a column of blank, on top of the normal key gap.
+	for _, kw := range []int{5, 7, 8} {
+		if g := homeGapXIn(kw, 1); g < (kw+1)/2 {
+			t.Errorf("homeGapXIn(%d) = %d, want at least half a column", kw, g)
+		}
+	}
+}
+
+// The single-block layout must measure the left half exactly as the split one
+// does, or the right half starts at a different place in each.
+func TestFullWidthMatchesSplitHalf(t *testing.T) {
+	for _, kw := range []int{3, 5} {
+		for _, kg := range []int{1, 2} {
+			if got, want := lenWithGap(kbHalfCols, kbLeftHome, kw, kg), kbSplitLeftWidth(kw, kg); got != want {
+				t.Errorf("kw=%d kg=%d: full-width left half %d, split %d", kw, kg, got, want)
+			}
+			// The first right-half key starts there plus the separator.
+			if got, want := kbFullKeyX(kbSplitCol, kw, kg), kbSplitLeftWidth(kw, kg)+fullHalfGap; got != want {
+				t.Errorf("kw=%d kg=%d: right half starts at %d, want %d", kw, kg, got, want)
+			}
+		}
+	}
+}
+
+// Both sides of each home block are padded, including the outer edge of the
+// left block, which has no neighbouring column.
+func TestBuiltinHomeGapBothSides(t *testing.T) {
+	const kw, kg = 5, 1
+	step := kw + kg
+	gap := step + homeGapXIn(kw, kg)
+
+	// a is the first column, so its padding shows as the whole block being
+	// indented rather than as a step from the column before it.
+	if got := homeColX(kbSplitCol, kbLeftHome, 0, kw, kg); got != homeGapXIn(kw, kg) {
+		t.Errorf("a starts at %d, want the gap width %d", got, homeGapXIn(kw, kg))
+	}
+	right := homeColX(kbHalfCols, kbLeftHome, kbLeftHome.start+kbLeftHome.cols, kw, kg) -
+		homeColX(kbHalfCols, kbLeftHome, kbLeftHome.start+kbLeftHome.cols-1, kw, kg)
+	if right != gap {
+		t.Errorf("left block: gap after t is %d, want %d", right, gap)
+	}
+}

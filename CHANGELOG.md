@@ -1,10 +1,13 @@
 # Unreleased:
  - The keyboard matrix shows the four home keys (`arst` / `oien`) in their real
    columns, taken from the keymap, with every other column at the normal
-   spacing. Thumb keys are laid out from the keymap's own columns and sit
-   tucked in at the inner edge of each half, like a split keyboard; the space
-   bars sit just inside that edge. The built-in halves are padded to the same
-   width so the split gap, and the Chatsubo box inside it, stay centred.
+   spacing. The home cluster is separated from the rest of its row by a gap of
+   about half a key width on each side; the gap is measured against the cap
+   width so it stays visible at any terminal size. Thumb keys are laid out from
+   the keymap's own columns and sit tucked in at the inner edge of each half,
+   like a split keyboard; the space bars sit just inside that edge. The
+   built-in halves are padded to the same width so the split gap, and the
+   Chatsubo box inside it, stay centred.
  - Layer keys: a `TD(n)` tap-dance whose hold action is a layer key now
    activates its layer, `DF(n)` for `n > 0` selects layer `n` (it used to clear
    all toggles), layer numbers outside the layout are ignored, `F1`/`F2`

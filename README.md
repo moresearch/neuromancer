@@ -14,7 +14,8 @@ quotes, books, generated drills, or live coaching.
 - Vial `.vil` support: layer matrices, HRMs, layer activators, automatic split
   detection, and inferred layer names (`num/sym`, `mouse`, `fn/media`, …).
 - The matrix is a clean grid: every row aligned to the same columns, equal
-  halves, and thumb keys on that grid at each half's inner edge.
+  halves, and thumb keys on that grid at each half's inner edge. The home
+  cluster (`arst` / `oien`) is set off by half a key width of blank space.
 - Physical layer tracking on Linux through the Vial raw HID interface: hold a
   thumb layer key and the display switches to that layer. Momentary, layer-tap,
   toggle (`TG`), `TO`, `DF`, and tap-dance (`TD`) layer keys are all followed.

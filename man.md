@@ -302,7 +302,9 @@ are determined exclusively by the input.
   board: every row starts on the same column, both halves are the same width,
   and the thumb keys sit on that same grid, flush with the inner edge of each
   half. The home keys `a r s t` and `n e i o` keep the columns they have on the
-  keyboard. For a Vial layout the columns come from the keymap itself. On a
+  keyboard, and their cluster is set off from the rest of the row by about half
+  a key width of blank space on each side. For a Vial layout the columns come
+  from the keymap itself. On a
   terminal too narrow for the split layout the whole keyboard is drawn as one
   block, with the halves still separated.
 
