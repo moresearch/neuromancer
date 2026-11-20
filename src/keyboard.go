@@ -472,8 +472,8 @@ type kbHomeBlock struct {
 // columns 1..4. The left block starts at column 0, so only its far side is
 // opened up; the right block has columns on both sides.
 var (
-	kbLeftHome  = kbHomeBlock{start: 0, cols: 4, after: true}
-	kbRightHome = kbHomeBlock{start: 1, cols: 4, before: true, after: true}
+	kbLeftHome  = kbHomeBlock{start: 0, cols: 4}
+	kbRightHome = kbHomeBlock{start: 1, cols: 4}
 )
 
 // halfBlock returns block if it fits a half of halfCols columns, otherwise a
@@ -517,6 +517,18 @@ func kbSplitLeftWidth(keyWidth, keyGap int) int {
 	return kbSplitMaxOffset(keyWidth) + lenWithGap(kbSplitCol, kbLeftHome, keyWidth, keyGap)
 }
 
+// kbSplitLeftPad is the blank space added on the left so both halves take the
+// same width. The rows of the right half jut out (; [ ] \ and ') which makes
+// it wider, and an uneven matrix would leave the split gap, and the Chatsubo
+// box inside it, off centre.
+func kbSplitLeftPad(keyWidth, keyGap int) int {
+	pad := kbSplitRightWidth(keyWidth, keyGap) - kbSplitLeftWidth(keyWidth, keyGap)
+	if pad < 0 {
+		return 0
+	}
+	return pad
+}
+
 func kbSplitRightWidth(keyWidth, keyGap int) int {
 	max := 0
 	for _, row := range kbRows {
@@ -550,58 +562,34 @@ func kbSplitKeyX(row, col, keyWidth, keyGap int) (x int, right bool) {
 	return homeColX(max, kbRightHome, col-kbSplitCol, keyWidth, keyGap), true
 }
 
-// Thumb cluster sizes, in key cells: a Sofle-style pair of 1.5u keys around a
-// 1u key, tucked in under the inner edge of each half.
-const (
-	thumbOuterCells = 3 // 1.5 keys, in half cells
-	thumbInnerCells = 2 // 1u key, in half cells
-)
+// thumbClusterHalfCells is the width of a half's thumb cluster in half cells:
+// a 1.5u / 1u / 1.5u cluster, mirrored on the right half.
+const thumbClusterHalfCells = 8
 
-// thumbCluster returns the width, in half cells, of a half's thumb cluster.
-func thumbCluster() int { return 2*thumbOuterCells + thumbInnerCells }
-
-// halfCells converts half cells to screen columns for the given metrics.
-func halfCells(half int, keyWidth, keyGap int) int {
-	return half * (keyWidth + keyGap) / 2
+// thumbClusterWidth is the cluster width in screen columns.
+func thumbClusterWidth(keyWidth, keyGap int) int {
+	return thumbClusterHalfCells * homeGapStep(keyWidth, keyGap) / 2
 }
 
-// thumbRowX returns the left edge of a half's thumb cluster. The cluster is
-// flush with the inner edge of the half, like the inner thumb keys on a Sofle.
-func thumbRowX(halfCols int, block kbHomeBlock, fromRight bool, keyWidth, keyGap int) int {
+// thumbRowX returns the left edge of a half's thumb cluster. The cluster sits
+// against the inner edge of its half, where a split keyboard puts the thumbs.
+func thumbRowX(halfCols int, block kbHomeBlock, keyWidth, keyGap int) int {
 	half := lenWithGap(halfCols, block, keyWidth, keyGap)
-	if !fromRight {
-		return 0
-	}
-	return half - halfCells(thumbCluster(), keyWidth, keyGap)
+	return half - thumbClusterWidth(keyWidth, keyGap)
 }
 
 // homeSpaceRect returns the left edge and width of the space bar in a half's
-// thumb cluster. The bar centres on the home columns, the way a split
-// keyboard's space keys sit under the home block rather than the whole half.
-func homeSpaceRect(halfCols int, block kbHomeBlock, fromRight bool, keyWidth, keyGap int) (x, width int) {
-	halfCellsW := halfCells(thumbCluster(), keyWidth, keyGap)
-	block, framed := halfBlock(halfCols, block)
-	middle := halfCols / 2
-	if framed {
-		middle = block.start + block.cols/2
-	}
-	width = halfCellsW * 2 / 3
-	x = homeColX(halfCols, block, middle, keyWidth, keyGap) + keyWidth/2 - width/2
-	lo := thumbRowX(halfCols, block, fromRight, keyWidth, keyGap)
-	if fromRight {
-		lo = thumbRowX(halfCols, block, true, keyWidth, keyGap)
-	}
-	if x < lo {
-		x = lo
-	}
-	if x+width > lo+halfCellsW {
-		x = lo + halfCellsW - width
-	}
+// thumb cluster, centred in the cluster.
+func homeSpaceRect(halfCols int, block kbHomeBlock, keyWidth, keyGap int) (x, width int) {
+	cluster := thumbClusterWidth(keyWidth, keyGap)
+	width = cluster / 2
+	x = thumbRowX(halfCols, block, keyWidth, keyGap) + (cluster-width)/2
 	return x, width
 }
 
 func kbSplitWidth(keyWidth, keyGap, splitGap int) int {
-	return kbSplitLeftWidth(keyWidth, keyGap) + splitGap + kbSplitRightWidth(keyWidth, keyGap)
+	left := kbSplitLeftWidth(keyWidth, keyGap) + kbSplitLeftPad(keyWidth, keyGap)
+	return left + splitGap + kbSplitRightWidth(keyWidth, keyGap)
 }
 
 func kbBuiltinHomeKey(row, col int) bool {
@@ -642,7 +630,7 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 	leftWidth := 0
 	if split {
 		width = kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
-		leftWidth = kbSplitLeftWidth(m.keyWidth, m.keyGap)
+		leftWidth = kbSplitLeftWidth(m.keyWidth, m.keyGap) + kbSplitLeftPad(m.keyWidth, m.keyGap)
 	}
 	x0 := (sw - width) / 2
 
@@ -697,7 +685,7 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 					x = x0 + leftWidth + m.splitGap + gx
 					focused = focusRight
 				} else {
-					x = x0 + gx
+					x = x0 + kbSplitLeftPad(m.keyWidth, m.keyGap) + gx
 					focused = focusLeft
 				}
 			}
@@ -738,8 +726,8 @@ func (t *typer) drawBuiltinKeyboard(target rune) {
 		// Each thumb bar sits under its half's home block, aligned with the
 		// arst / oien columns and the home gap in front of them.
 		rightCols := len(kbRows[0].keys) - kbSplitCol
-		leftX, leftSpace := homeSpaceRect(kbSplitCol, kbLeftHome, false, m.keyWidth, m.keyGap)
-		rightX, rightSpace := homeSpaceRect(rightCols, kbRightHome, true, m.keyWidth, m.keyGap)
+		leftX, leftSpace := homeSpaceRect(kbSplitCol, kbLeftHome, m.keyWidth, m.keyGap)
+		rightX, rightSpace := homeSpaceRect(rightCols, kbRightHome, m.keyWidth, m.keyGap)
 		rightX += leftWidth + m.splitGap
 
 		homeStyle := t.defaultStyle.Foreground(tcell.ColorGreen).Dim(true)

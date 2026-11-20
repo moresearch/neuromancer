@@ -474,19 +474,28 @@ func (kb *vilKeyboard) thumbColX(row, col, keyWidth, keyGap int) int {
 	if !kb.isThumbRow(row) {
 		return kb.colX(col, keyWidth, keyGap)
 	}
-	// With rows split per half every row starts at its half's own column 0;
-	// with a column split the right half's keys start after the left half.
+	halfCols := kb.halfFor(col)
 	first := 0
 	if kb.halfRows == 0 && kb.splitCols && col >= kb.halfCols {
 		first = kb.halfCols
 	}
-	count := 0
-	for c := first; c < col; c++ {
+	// Right-align the cluster against the half's inner edge, the way a split
+	// keyboard tucks its thumb keys in, and keep the key order within it.
+	thumbCount := 0
+	before := 0
+	for c := first; c < halfCols; c++ {
 		if kb.cellPresent(row, c) {
-			count++
+			thumbCount++
+			if c < col {
+				before++
+			}
 		}
 	}
-	return count * homeGapStep(keyWidth, keyGap)
+	if thumbCount == 0 {
+		return 0
+	}
+	half := lenWithGap(halfCols, kb.homeBlockFor(col), keyWidth, keyGap)
+	return half - (thumbCount-before)*homeGapStep(keyWidth, keyGap)
 }
 
 // cellPresent reports whether row has a key at col.

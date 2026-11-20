@@ -74,14 +74,14 @@ func TestDrawKeyboardHighlights(t *testing.T) {
 		t.Fatalf("keyboard not visible: %+v %v", m, ok)
 	}
 	width := kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
-	leftWidth := kbSplitLeftWidth(m.keyWidth, m.keyGap)
+	leftWidth := kbSplitLeftWidth(m.keyWidth, m.keyGap) + kbSplitLeftPad(m.keyWidth, m.keyGap)
 	x0 := (140 - width) / 2
 	keyX := func(row, col int) int {
 		gx, right := kbSplitKeyX(row, col, m.keyWidth, m.keyGap)
 		if right {
 			return x0 + leftWidth + m.splitGap + gx
 		}
-		return x0 + gx
+		return x0 + kbSplitLeftPad(m.keyWidth, m.keyGap) + gx
 	}
 	keyY := func(row int) int {
 		return m.top + row*(m.keyH+m.rowGap)
@@ -184,14 +184,14 @@ func TestBuiltinTargetFingerHome(t *testing.T) {
 		t.Fatal("keyboard does not fit")
 	}
 	width := kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
-	leftWidth := kbSplitLeftWidth(m.keyWidth, m.keyGap)
+	leftWidth := kbSplitLeftWidth(m.keyWidth, m.keyGap) + kbSplitLeftPad(m.keyWidth, m.keyGap)
 	x0 := (140 - width) / 2
 	keyX := func(row, col int) int {
 		gx, right := kbSplitKeyX(row, col, m.keyWidth, m.keyGap)
 		if right {
 			return x0 + leftWidth + m.splitGap + gx
 		}
-		return x0 + gx
+		return x0 + kbSplitLeftPad(m.keyWidth, m.keyGap) + gx
 	}
 	keyY := func(row int) int {
 		return m.top + row*(m.keyH+m.rowGap)

@@ -1,16 +1,10 @@
 # Unreleased:
- - The keyboard matrix now sets the four home keys (`arst` / `oien`) apart
-   column-wise: a few blank columns on each side of the block, with every other
-   column keeping the normal spacing. The columns come from the physical
-   layout, so a Vial keymap with an outer macro column keeps `arst` after that
-   macro column and `oien` inboard of it. Thumb keys keep the keymap's own
-   columns and are laid out on their own spacing, so split-keyboard thumb
-   clusters stay tucked in at each half's inner edge; the space bars sit under
-   the home block. Narrow terminals draw the halves as one block but still
-   separate them. Keys keep their size and the matrix width (and therefore text
-   wrapping) accounts for the gaps. Terminals too narrow for the split layout
-   draw the whole keyboard as one block at full-size caps instead of shrinking
-   every key.
+ - The keyboard matrix shows the four home keys (`arst` / `oien`) in their real
+   columns, taken from the keymap, with every other column at the normal
+   spacing. Thumb keys are laid out from the keymap's own columns and sit
+   tucked in at the inner edge of each half, like a split keyboard; the space
+   bars sit just inside that edge. The built-in halves are padded to the same
+   width so the split gap, and the Chatsubo box inside it, stay centred.
  - Layer keys: a `TD(n)` tap-dance whose hold action is a layer key now
    activates its layer, `DF(n)` for `n > 0` selects layer `n` (it used to clear
    all toggles), layer numbers outside the layout are ignored, `F1`/`F2`

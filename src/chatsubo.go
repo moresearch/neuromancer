@@ -315,7 +315,7 @@ func (t *typer) chatPanelGap(m kbMetrics) (int, bool) {
 	}
 	width := kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
 	x0 := (sw - width) / 2
-	return x0 + kbSplitLeftWidth(m.keyWidth, m.keyGap), true
+	return x0 + kbSplitLeftWidth(m.keyWidth, m.keyGap) + kbSplitLeftPad(m.keyWidth, m.keyGap), true
 }
 
 // chatPanelRect returns the panel rectangle, or ok=false when the layout is
@@ -352,7 +352,17 @@ func (t *typer) chatPanelRect(m kbMetrics) (x, y, width, height int, ok bool) {
 		return 0, 0, 0, 0, false
 	}
 
-	x = gapX + (m.splitGap-width)/2
+	// Centre the panel on the screen. The built-in halves are not equally wide,
+	// so the raw split gap is not centred; placing the panel at the grid
+	// centre keeps it under the middle of the text, and it still falls inside
+	// the gap because the gap is much wider than the box.
+	x = (sw - width) / 2
+	if lo := gapX; x < lo {
+		x = lo
+	}
+	if hi := gapX + m.splitGap - width; x > hi {
+		x = hi
+	}
 	y = m.top + (m.height-height)/2
 	if x < 1 || x+width > sw-1 {
 		return 0, 0, 0, 0, false
