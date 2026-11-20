@@ -298,15 +298,13 @@ are determined exclusively by the input.
   and leaves padding below the keyboard. Terminal font size itself is
   controlled by your terminal emulator.
 
-  The four home keys `a r s t` on the left half and `n e i o` on the right are
-  contiguous, as they are on the keyboard, and the two halves keep every other
-  column at the normal spacing. For a Vial layout the columns come from the
-  keymap itself, so a Miryoku-style board with an outer macro column keeps
-  `a r s t` after it and `n e i o` beside it. Thumb keys are laid out from the
-  keymap's own columns, tucked in at the inner edge of each half the way a
-  split keyboard puts them; the space bars sit just inside that edge. On a
+  The matrix is drawn as a clean grid rather than a replica of the physical
+  board: every row starts on the same column, both halves are the same width,
+  and the thumb keys sit on that same grid, flush with the inner edge of each
+  half. The home keys `a r s t` and `n e i o` keep the columns they have on the
+  keyboard. For a Vial layout the columns come from the keymap itself. On a
   terminal too narrow for the split layout the whole keyboard is drawn as one
-  block, with the halves still separated, instead of shrinking every keycap.
+  block, with the halves still separated.
 
   Use **-drill** to generate a test from the characters which require a
   non-base layer. Any text file can also be used as a lesson:

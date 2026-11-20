@@ -175,11 +175,11 @@ func kbBuiltinMetrics(screenWidth, screenHeight, splitGap int) (kbMetrics, bool)
 	}, true
 }
 
+// kbOffset is the stagger of a row. The matrix is drawn as a clean grid, so
+// every row starts in the same column; the physical stagger of the printed
+// keyboard is deliberately not reproduced.
 func kbOffset(row, keyWidth int) int {
-	if keyWidth > 1 {
-		return kbRows[row].offset * (keyWidth - 1)
-	}
-	return kbRows[row].offset
+	return 0
 }
 
 // kbWidth is the width of the un-split matrix. The full-width layout keeps the
@@ -505,8 +505,13 @@ func lenWithGap(halfCols int, block kbHomeBlock, keyWidth, keyGap int) int {
 	return homeColX(halfCols, block, halfCols, keyWidth, keyGap) - keyGap
 }
 
+// kbHalfCols is the number of key columns in each half of the grid. The right
+// half is wider because its rows carry the jutting ; [ ] \ tail; the left half
+// is padded to the same width so the grid is symmetric.
+const kbHalfCols = 8
+
 func kbSplitLeftWidth(keyWidth, keyGap int) int {
-	return kbSplitMaxOffset(keyWidth) + lenWithGap(kbSplitCol, kbLeftHome, keyWidth, keyGap)
+	return lenWithGap(kbHalfCols, kbLeftHome, keyWidth, keyGap)
 }
 
 // kbSplitLeftPad is blank space added to the right of the left half so both
@@ -544,7 +549,7 @@ func kbSplitKeyX(row, col, keyWidth, keyGap int) (x int, right bool) {
 		return 0, false
 	}
 	if col < kbSplitCol {
-		return kbOffset(row, keyWidth) + homeColX(kbSplitCol, kbLeftHome, col, keyWidth, keyGap), false
+		return kbOffset(row, keyWidth) + homeColX(kbHalfCols, kbLeftHome, col, keyWidth, keyGap), false
 	}
 	max := 0
 	for _, r := range kbRows {
@@ -555,28 +560,22 @@ func kbSplitKeyX(row, col, keyWidth, keyGap int) (x int, right bool) {
 	return homeColX(max, kbRightHome, col-kbSplitCol, keyWidth, keyGap), true
 }
 
-// thumbClusterHalfCells is the width of a half's thumb cluster in half cells:
-// a 1.5u / 1u / 1.5u cluster, mirrored on the right half.
-const thumbClusterHalfCells = 8
+// thumbCells is how many grid columns a half's thumb cluster spans. The
+// cluster is flush with the inner edge of the half, so it lines up with the
+// same column grid as every other row.
+const thumbCells = 3
 
-// thumbClusterWidth is the cluster width in screen columns.
-func thumbClusterWidth(keyWidth, keyGap int) int {
-	return thumbClusterHalfCells * homeGapStep(keyWidth, keyGap) / 2
-}
-
-// thumbRowX returns the left edge of a half's thumb cluster. The cluster sits
-// against the inner edge of its half, where a split keyboard puts the thumbs.
+// thumbRowX returns the left edge of a half's thumb cluster.
 func thumbRowX(halfCols int, block kbHomeBlock, keyWidth, keyGap int) int {
 	half := lenWithGap(halfCols, block, keyWidth, keyGap)
-	return half - thumbClusterWidth(keyWidth, keyGap)
+	return half - thumbCells*homeGapStep(keyWidth, keyGap) + keyGap
 }
 
-// homeSpaceRect returns the left edge and width of the space bar in a half's
-// thumb cluster, centred in the cluster.
+// homeSpaceRect returns the left edge and width of the space bar, spanning the
+// whole thumb cluster on the grid.
 func homeSpaceRect(halfCols int, block kbHomeBlock, keyWidth, keyGap int) (x, width int) {
-	cluster := thumbClusterWidth(keyWidth, keyGap)
-	width = cluster / 2
-	x = thumbRowX(halfCols, block, keyWidth, keyGap) + (cluster-width)/2
+	x = thumbRowX(halfCols, block, keyWidth, keyGap)
+	width = thumbCells*keyWidth + (thumbCells-1)*keyGap
 	return x, width
 }
 

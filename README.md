@@ -13,9 +13,8 @@ quotes, books, generated drills, or live coaching.
 - Built-in Colemak-DH matrix with shifted-key guidance.
 - Vial `.vil` support: layer matrices, HRMs, layer activators, automatic split
   detection, and inferred layer names (`num/sym`, `mouse`, `fn/media`, …).
-- Home keys are shown in their real columns, and thumb clusters keep the
-  keymap's own columns, tucked in at each half's inner edge the way a split
-  keyboard places them (works for the loaded `.vil` too).
+- The matrix is a clean grid: every row aligned to the same columns, equal
+  halves, and thumb keys on that grid at each half's inner edge.
 - Physical layer tracking on Linux through the Vial raw HID interface: hold a
   thumb layer key and the display switches to that layer. Momentary, layer-tap,
   toggle (`TG`), `TO`, `DF`, and tap-dance (`TD`) layer keys are all followed.
