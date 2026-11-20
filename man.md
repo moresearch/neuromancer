@@ -23,10 +23,10 @@ usage: nm \[OPTION\]... \[FILE\]
 
   While a test is running the Colemak-DH (matrix) layout is shown at the bottom
   of the screen. The key producing the next character is highlighted in green.
-  Pressing the wrong key highlights that key's location in red. The four home
-  columns of each split are separated from the outer index/pointer column by one
-  extra blank cell, so a reach away from the home columns is visible at a
-  glance.
+  Pressing the wrong key highlights that key's location in red. In each split
+  half the four home columns (`arst` and `oien`) are set off from the other
+  columns by one extra blank cell, so a reach away from the home columns is
+  visible at a glance.
 
 # OPTIONS
 
@@ -299,11 +299,14 @@ are determined exclusively by the input.
   and leaves padding below the keyboard. Terminal font size itself is
   controlled by your terminal emulator.
 
-  Within each half, the four home columns are separated from the outer
-  index/pointer columns by one extra blank cell. The boundary uses the same rule
-  as the dim green home tint, so the gap and the tint always agree. On a
-  terminal too narrow for the split layout the whole keyboard is drawn as one
-  block instead of shrinking every keycap.
+  Within each half the four home columns (`arst` on the left, `oien` on the
+  right) form a contiguous block which is set off from the rest of the half by
+  one extra blank cell. Extra columns (the outer index columns
+  such as `q`/`p`, the jutting `;'[]\` tail) stay on the far side of that gap
+  and keep the normal spacing between themselves. Each half's space bar starts
+  under that gap and spans the home block, so the thumbs line up under the home
+  fingers. On a terminal too narrow for the split layout the whole keyboard is
+  drawn as one block instead of shrinking every keycap.
 
   Use **-drill** to generate a test from the characters which require a
   non-base layer. Any text file can also be used as a lesson:

@@ -466,31 +466,14 @@ func isHomeDistance(halfCols, d int) bool {
 	return d >= 1 && d <= 4
 }
 
-// gapCols returns the number of columns in the outer block of a half of
-// halfCols columns. The four innermost columns are home columns, so a half of
-// five or more columns keeps halfCols-4 outer columns; a half which is all
-// home keys gets no gap at all (no distinct home block).
-func gapCols(halfCols int) int {
-	if halfCols > 4 {
-		return halfCols - 4
-	}
-	return -1
-}
-
 // colX returns the x offset of column col relative to the half which contains
 // it, including the home-column gap. Drawing and width both go through it.
 func (kb *vilKeyboard) colX(col, keyWidth, keyGap int) int {
-	var halfCols int
 	switch {
 	case kb.splitCols:
-		halfCols = kb.halfCols
-		col -= (col / kb.halfCols) * kb.halfCols
+		return homeColX(kb.halfCols, col%kb.halfCols, keyWidth, keyGap)
 	case kb.halfRows > 0:
-		halfCols = kb.maxCols
-	}
-	outer := gapCols(halfCols)
-	if outer > 0 && col >= outer {
-		return (col + homeGapCells) * (keyWidth + keyGap)
+		return homeColX(kb.maxCols, col, keyWidth, keyGap)
 	}
 	return col * (keyWidth + keyGap)
 }
@@ -499,12 +482,7 @@ func (kb *vilKeyboard) halfWidthWithGap(halfCols, keyWidth, keyGap int) int {
 	if halfCols <= 0 {
 		return 0
 	}
-	// Same gap rule as colX: only a half with an outer block gets a gap.
-	cols := halfCols
-	if gapCols(halfCols) > 0 {
-		cols += homeGapCells
-	}
-	return cols*keyWidth + (cols-1)*keyGap
+	return lenWithGap(uint(halfCols), keyWidth, keyGap)
 }
 
 func (kb *vilKeyboard) targetHome(row, col int) (int, int, bool) {

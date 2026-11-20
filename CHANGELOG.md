@@ -1,8 +1,10 @@
 # Unreleased:
  - The keyboard matrix now draws a blank home-column gap: on each split half the
-   four home columns are separated from the outer index/pointer columns by one
-   extra cell. Keys keep their size and the matrix width (and therefore text
-   wrapping) accounts for the gap. Terminals too narrow for the split layout
+   four home columns (`arst` / `oien`) are set off from the rest of the half by
+   one extra cell, so only the home block stands apart and every other column
+   keeps the normal spacing. Keys keep their size and the matrix width (and
+   therefore text wrapping) accounts for the gap; the space bars start under
+   the gap and span their home block. Terminals too narrow for the split layout
    draw the whole keyboard as one block at full-size caps instead of shrinking
    every key.
  - Layer keys: a `TD(n)` tap-dance whose hold action is a layer key now

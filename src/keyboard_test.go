@@ -77,7 +77,7 @@ func TestDrawKeyboardHighlights(t *testing.T) {
 	leftWidth := kbSplitLeftWidth(m.keyWidth, m.keyGap)
 	x0 := (140 - width) / 2
 	keyX := func(row, col int) int {
-		gx, right := kbSplitKeyX(col, m.keyWidth, m.keyGap)
+		gx, right := kbSplitKeyX(row, col, m.keyWidth, m.keyGap)
 		if right {
 			return x0 + leftWidth + m.splitGap + gx
 		}
@@ -187,7 +187,7 @@ func TestBuiltinTargetFingerHome(t *testing.T) {
 	leftWidth := kbSplitLeftWidth(m.keyWidth, m.keyGap)
 	x0 := (140 - width) / 2
 	keyX := func(row, col int) int {
-		gx, right := kbSplitKeyX(col, m.keyWidth, m.keyGap)
+		gx, right := kbSplitKeyX(row, col, m.keyWidth, m.keyGap)
 		if right {
 			return x0 + leftWidth + m.splitGap + gx
 		}
@@ -241,11 +241,27 @@ func blankGapColumns(scr tcell.Screen, m kbMetrics, keyX func(row, col int) int,
 	return gaps
 }
 
-// drawnKeyX returns the screen x of the label of key ch on the row containing
-// the given anchor key, or -1.
+// drawnKeyX returns the screen x of the label of key ch on screen row y, or
+// -1. The label must sit inside a keycap ("│ c │"), so letters which also
+// appear in running text are ignored.
 func drawnKeyX(scr tcell.Screen, y, width int, ch rune) int {
-	for x := 0; x < width; x++ {
-		if c, _, _, _ := scr.GetContent(x, y); c == ch {
+	for x := 1; x < width-1; x++ {
+		c, _, _, _ := scr.GetContent(x, y)
+		if c != ch {
+			continue
+		}
+		// A one-cell label is centred in its keycap: "│ c │".
+		before, _, _, _ := scr.GetContent(x-1, y)
+		after, _, _, _ := scr.GetContent(x+1, y)
+		if before != ' ' || after != ' ' {
+			continue
+		}
+		if x < 2 || x+2 >= width {
+			continue
+		}
+		edgeL, _, _, _ := scr.GetContent(x-2, y)
+		edgeR, _, _, _ := scr.GetContent(x+2, y)
+		if edgeL == '│' && edgeR == '│' {
 			return x
 		}
 	}
@@ -253,10 +269,6 @@ func drawnKeyX(scr tcell.Screen, y, width int, ch rune) int {
 }
 
 func TestBuiltinHomeGap(t *testing.T) {
-	if kbLeftHomeCol != 1 || kbRightHomeCol != 4 {
-		t.Fatalf("home columns %d/%d want 1/4", kbLeftHomeCol, kbRightHomeCol)
-	}
-
 	const sw, sh = 140, 30
 	scr := tcell.NewSimulationScreen("UTF-8")
 	if err := scr.Init(); err != nil {
@@ -266,41 +278,87 @@ func TestBuiltinHomeGap(t *testing.T) {
 	scr.SetSize(sw, sh)
 
 	typ := newTestTyper(scr)
-	typ.drawKeyboard('g')
+	// Target a key outside the rows under test so every label is drawn.
+	typ.drawKeyboard('d')
 
-	// Locate the row holding the q..p home keys.
-	homeY := -1
-	for y := 0; y < sh && homeY < 0; y++ {
-		if drawnKeyX(scr, y, sw, 'p') >= 0 {
-			homeY = y
+	m, ok := typ.keyboardMetrics()
+	if !ok {
+		t.Fatal("keyboard does not fit")
+	}
+	// keyX returns the left edge of key ch, verified from the matrix geometry:
+	// the label must be drawn at the centre of that keycap.
+	keyX := func(ch rune) int {
+		// Find the key in the built-in table directly; kbFind would also match
+		// characters of the guidance text.
+		row, col := -1, -1
+		for i := range kbRows {
+			for j, k := range kbRows[i].keys {
+				if k == ch {
+					row, col = i, j
+				}
+			}
 		}
-	}
-	if homeY < 0 {
-		t.Fatal("home row not drawn")
-	}
-	pos := func(ch rune) int {
-		x := drawnKeyX(scr, homeY, sw, ch)
-		if x < 0 {
-			t.Fatalf("key %q not drawn", string(ch))
+		if row < 0 {
+			t.Fatalf("key %q not in the matrix", string(ch))
+		}
+		y := m.top + row*(m.keyH+m.rowGap) + m.keyH/2
+		x, right := kbSplitKeyX(row, col, m.keyWidth, m.keyGap)
+		if right {
+			x += kbSplitLeftWidth(m.keyWidth, m.keyGap) + m.splitGap
+		}
+		x += (sw - kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)) / 2
+		centre := x + m.keyWidth/2
+		got, _, _, _ := scr.GetContent(centre, y)
+		if got != ch {
+			t.Fatalf("%q expected at %d, found %q", string(ch), centre, string(got))
 		}
 		return x
 	}
-	q, w, f := pos('q'), pos('w'), pos('f')
-	// The left outer column (q) is separated from the home block by one extra
-	// key cell, while the four home columns stay contiguous.
-	if w-q <= f-w {
-		t.Errorf("no home gap on the left half: q=%d w=%d f=%d", q, w, f)
+
+	step := m.keyWidth + m.keyGap
+	cell := m.keyWidth + m.keyGap // one whole key cell
+
+	// Left half, upper row: q is the only outer column, so the gap comes right
+	// after it and w f p b are the home block.
+	if gap := keyX('w') - keyX('q'); gap != step+cell {
+		t.Errorf("left gap after q: %d, want %d", gap, step+cell)
 	}
-	if p := pos('p'); p-f != f-w {
-		t.Errorf("left home columns are not contiguous: w=%d f=%d p=%d", w, f, p)
+	if keyX('f')-keyX('w') != step || keyX('p')-keyX('f') != step {
+		t.Errorf("left home columns are not contiguous")
+	}
+	// Left half, home row: a is the outer key and is separated from the home
+	// block r s t.
+	if gap := keyX('r') - keyX('a'); gap != step+cell {
+		t.Errorf("left gap after a: %d, want %d", gap, step+cell)
+	}
+	if keyX('s')-keyX('r') != step || keyX('t')-keyX('s') != step {
+		t.Errorf("left home columns are not contiguous")
+	}
+	if keyX('g')-keyX('t') != step {
+		t.Errorf("left home columns are not contiguous")
 	}
 
-	j, l, u := pos('j'), pos('l'), pos('u')
-	if u-l != l-j {
-		t.Errorf("right outer columns are not contiguous: j=%d l=%d u=%d", j, l, u)
+	// Right half, upper row: j l are the outer columns, then the gap, then the
+	// four home columns u y ; [.
+	if keyX('l')-keyX('j') != step {
+		t.Errorf("right outer columns are not contiguous")
 	}
-	if semicolon := pos(';'); semicolon-u <= u-l {
-		t.Errorf("no home gap on the right half: u=%d ;=%d", u, semicolon)
+	if gap := keyX('u') - keyX('l'); gap != step+cell {
+		t.Errorf("right gap after l: %d, want %d", gap, step+cell)
+	}
+	if keyX('y')-keyX('u') != step || keyX(';')-keyX('y') != step {
+		t.Errorf("right home columns are not contiguous")
+	}
+	// Right half, home row: m n are outside the block, then the gap, then
+	// e i o '. The gap sits between n and e.
+	if keyX('n')-keyX('m') != step {
+		t.Errorf("right home row outer columns are not contiguous")
+	}
+	if gap := keyX('e') - keyX('n'); gap != step+cell {
+		t.Errorf("right gap after n: %d, want %d", gap, step+cell)
+	}
+	if keyX('i')-keyX('e') != step || keyX('o')-keyX('i') != step {
+		t.Errorf("right home columns are not contiguous")
 	}
 }
 
@@ -326,26 +384,40 @@ func TestVilHomeGap(t *testing.T) {
 		t.Fatal("keyboard does not fit")
 	}
 
-	// Collect the x of every keycap's top-left corner on the first row.
+	// Every key is drawn as "╭…╮"; record each run's left edge.
 	var caps []int
+	open := false
 	for x := 0; x < sw; x++ {
-		if ch, _, _, _ := sim.GetContent(x, m.top); ch == '╭' {
+		ch, _, _, _ := sim.GetContent(x, m.top)
+		if ch == '╭' && !open {
 			caps = append(caps, x)
+			open = true
+		}
+		if ch == '╮' {
+			open = false
 		}
 	}
-	if len(caps) < 6 {
-		t.Fatalf("found %d keycaps", len(caps))
+	halfCap := caps[0] + kb.halfWidthWithGap(kb.halfCols, m.keyWidth, m.keyGap) + m.splitGap
+	left := caps[:0:0]
+	for _, x := range caps {
+		if x < halfCap {
+			left = append(left, x)
+		}
 	}
-	// First half: two outer columns, then the gap, then four home columns.
-	step := caps[1] - caps[0]
-	gapStep := caps[2] - caps[1]
-	if gapStep <= step {
-		t.Fatalf("no home gap after the outer block: step=%d gapStep=%d", step, gapStep)
+	if len(left) != kb.halfCols {
+		t.Fatalf("left half has %d keycaps, want %d: %v", len(left), kb.halfCols, caps)
 	}
-	if gapStep != step+m.keyWidth {
-		t.Errorf("gap step=%d want one key cell more: %d", gapStep, step+m.keyWidth)
+	// One outer column, then the gap, then the four home columns.
+	step := m.keyWidth + m.keyGap
+	if gap := left[1] - left[0]; gap != step+m.keyWidth {
+		t.Errorf("vil gap step=%d want %d", gap, step+m.keyWidth)
 	}
-	if caps[3]-caps[2] != step || caps[4]-caps[3] != step {
-		t.Errorf("home columns are not contiguous: %v", caps[:5])
+	for i := 2; i < len(left); i++ {
+		if left[i]-left[i-1] != step {
+			t.Errorf("vil home columns are not contiguous: %v", left)
+		}
+	}
+	if caps[len(left)] != halfCap {
+		t.Errorf("right half starts at %d, want %d", caps[len(left)], halfCap)
 	}
 }
