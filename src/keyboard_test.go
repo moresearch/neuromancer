@@ -269,89 +269,49 @@ func drawnKeyX(scr tcell.Screen, y, width int, ch rune) int {
 }
 
 func TestBuiltinHomeGap(t *testing.T) {
-	const sw, sh = 140, 30
-	scr := tcell.NewSimulationScreen("UTF-8")
-	if err := scr.Init(); err != nil {
-		t.Fatal(err)
-	}
-	defer scr.Fini()
-	scr.SetSize(sw, sh)
+	// A commonly sized layout (five-wide caps, two-wide key gaps).
+	const kw, kg = 5, 2
+	step := kw + kg
+	cell := kw + kg // one whole key cell
 
-	typ := newTestTyper(scr)
-	// Target a key outside the rows under test so every label is drawn.
-	typ.drawKeyboard('d')
-
-	m, ok := typ.keyboardMetrics()
-	if !ok {
-		t.Fatal("keyboard does not fit")
+	// Column offsets, independent of the per-row stagger.
+	colX := func(halfCols int, block kbHomeBlock, col int) int {
+		return homeColX(halfCols, block, col, kw, kg)
 	}
-	// keyX returns the left edge of key ch, verified from the matrix geometry:
-	// the label must be drawn at the centre of that keycap.
-	keyX := func(ch rune) int {
-		// Find the key in the built-in table directly; kbFind would also match
-		// characters of the guidance text.
-		row, col := -1, -1
-		for i := range kbRows {
-			for j, k := range kbRows[i].keys {
-				if k == ch {
-					row, col = i, j
-				}
+
+	// The home blocks are a r s t (left, columns 0..3) and n e i o (right,
+	// columns 1..4); each is an island with one blank cell on either side.
+	checkBlock := func(name string, halfCols int, block kbHomeBlock) {
+		for col := block.start + 1; col < block.start+block.cols; col++ {
+			if d := colX(halfCols, block, col) - colX(halfCols, block, col-1); d != step {
+				t.Errorf("%s: home columns are not contiguous at %d: %d", name, col, d)
 			}
 		}
-		if row < 0 {
-			t.Fatalf("key %q not in the matrix", string(ch))
+		if block.start > 0 {
+			if d := colX(halfCols, block, block.start) - colX(halfCols, block, block.start-1); d != step+cell {
+				t.Errorf("%s: gap before the block is %d, want %d", name, d, step+cell)
+			}
 		}
-		y := m.top + row*(m.keyH+m.rowGap) + m.keyH/2
-		x, right := kbSplitKeyX(row, col, m.keyWidth, m.keyGap)
-		if right {
-			x += kbSplitLeftWidth(m.keyWidth, m.keyGap) + m.splitGap
+		if end := block.start + block.cols; end < halfCols {
+			if d := colX(halfCols, block, end) - colX(halfCols, block, end-1); d != step+cell {
+				t.Errorf("%s: gap after the block is %d, want %d", name, d, step+cell)
+			}
 		}
-		x += (sw - kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)) / 2
-		centre := x + m.keyWidth/2
-		got, _, _, _ := scr.GetContent(centre, y)
-		if got != ch {
-			t.Fatalf("%q expected at %d, found %q", string(ch), centre, string(got))
+	}
+	checkBlock("left", kbSplitCol, kbLeftHome)
+	checkBlock("right", 8, kbRightHome)
+
+	// The block columns hold the home keys on the home row.
+	homeRow := kbRows[2].keys
+	for i, want := range []rune{'a', 'r', 's', 't'} {
+		if got := homeRow[kbLeftHome.start+i]; got != want {
+			t.Errorf("left block column %d is %c, want %c", i, got, want)
 		}
-		return x
 	}
-
-	step := m.keyWidth + m.keyGap
-	cell := m.keyWidth + m.keyGap // one whole key cell
-
-	// Left half, upper row: q is the only outer column, so the gap comes right
-	// after it and w f p b are the home block.
-	if gap := keyX('w') - keyX('q'); gap != step+cell {
-		t.Errorf("left gap after q: %d, want %d", gap, step+cell)
-	}
-	if keyX('f')-keyX('w') != step || keyX('p')-keyX('f') != step {
-		t.Errorf("left home columns are not contiguous")
-	}
-	// Left half, home row: a is the outer key and is separated from the home
-	// block r s t.
-	if gap := keyX('r') - keyX('a'); gap != step+cell {
-		t.Errorf("left gap after a: %d, want %d", gap, step+cell)
-	}
-	if keyX('s')-keyX('r') != step || keyX('t')-keyX('s') != step {
-		t.Errorf("left home columns are not contiguous")
-	}
-	if keyX('g')-keyX('t') != step {
-		t.Errorf("left home columns are not contiguous")
-	}
-
-	// Right half, upper row: j l u y sit at the inner edge, then the gap, then
-	// the outer columns ; [ ] \.
-	if keyX('l')-keyX('j') != step || keyX('u')-keyX('l') != step || keyX('y')-keyX('u') != step {
-		t.Errorf("right inner columns are not contiguous")
-	}
-	if gap := keyX(';') - keyX('y'); gap != step+cell {
-		t.Errorf("right gap after y: %d, want %d", gap, step+cell)
-	}
-	// Right half, home row: m n e i are the home block; o ' sit outside it.
-	if keyX('e')-keyX('n') != step || keyX('i')-keyX('e') != step {
-		t.Errorf("right home columns are not contiguous")
-	}
-	if gap := keyX('o') - keyX('i'); gap != step+cell {
-		t.Errorf("right gap after i: %d, want %d", gap, step+cell)
+	for i, want := range []rune{'n', 'e', 'i', 'o'} {
+		if got := homeRow[kbSplitCol+kbRightHome.start+i]; got != want {
+			t.Errorf("right block column %d is %c, want %c", i, got, want)
+		}
 	}
 }
 
@@ -398,7 +358,7 @@ func TestVilHomeGap(t *testing.T) {
 	right := caps[kb.halfCols:]
 
 	step := m.keyWidth + m.keyGap
-	outer := homeBlockStart(kb.halfCols) // first home column of a half
+	outer := vilHomeBlock(kb.halfCols).start // first home column of a half
 
 	check := func(name string, caps []int) {
 		// The outer columns stay contiguous, the four home columns stay

@@ -469,17 +469,34 @@ func isHomeDistance(halfCols, d int) bool {
 // thumbColX is colX for a key on a thumb row: the thumb cluster is pulled in
 // from the outer edge so it sits under the home block.
 func (kb *vilKeyboard) thumbColX(row, col, keyWidth, keyGap int) int {
-	halfCols := kb.maxCols
-	switch {
-	case kb.splitCols && col < kb.halfCols:
-		halfCols = kb.halfCols
-	case kb.splitCols:
-		halfCols = kb.maxCols - kb.halfCols
-	}
 	if !kb.isThumbRow(row) {
 		return kb.colX(col, keyWidth, keyGap)
 	}
-	return thumbX(halfCols, kb.colX(col, keyWidth, keyGap), keyWidth, keyGap)
+	return thumbX(kb.halfWidthFor(col), kb.homeBlockFor(col), kb.colX(col, keyWidth, keyGap), keyWidth, keyGap)
+}
+
+// halfWidthFor is the number of columns in the half holding matrix column col.
+func (kb *vilKeyboard) halfWidthFor(col int) int {
+	switch {
+	case kb.splitCols && col < kb.halfCols:
+		return kb.halfCols
+	case kb.splitCols:
+		return kb.maxCols - kb.halfCols
+	}
+	return kb.maxCols
+}
+
+// vilHomeBlock is the home block of a Vial half: the four columns nearest the
+// inner edge, which is where the a r s t / n e i o keys sit.
+func vilHomeBlock(halfCols int) kbHomeBlock {
+	if halfCols <= 4 {
+		return kbHomeBlock{start: 0, cols: halfCols}
+	}
+	return kbHomeBlock{start: halfCols - 4, cols: 4}
+}
+
+func (kb *vilKeyboard) homeBlockFor(col int) kbHomeBlock {
+	return vilHomeBlock(kb.halfWidthFor(col))
 }
 
 // colX returns the x offset of column col relative to the half which contains
@@ -487,9 +504,9 @@ func (kb *vilKeyboard) thumbColX(row, col, keyWidth, keyGap int) int {
 func (kb *vilKeyboard) colX(col, keyWidth, keyGap int) int {
 	switch {
 	case kb.splitCols:
-		return homeColX(kb.halfCols, col%kb.halfCols, keyWidth, keyGap)
+		return homeColX(kb.halfCols, vilHomeBlock(kb.halfCols), col%kb.halfCols, keyWidth, keyGap)
 	case kb.halfRows > 0:
-		return homeColX(kb.maxCols, col, keyWidth, keyGap)
+		return homeColX(kb.maxCols, vilHomeBlock(kb.maxCols), col, keyWidth, keyGap)
 	}
 	return col * (keyWidth + keyGap)
 }
@@ -498,7 +515,7 @@ func (kb *vilKeyboard) halfWidthWithGap(halfCols, keyWidth, keyGap int) int {
 	if halfCols <= 0 {
 		return 0
 	}
-	return lenWithGap(uint(halfCols), keyWidth, keyGap)
+	return lenWithGap(halfCols, vilHomeBlock(halfCols), keyWidth, keyGap)
 }
 
 func (kb *vilKeyboard) targetHome(row, col int) (int, int, bool) {
