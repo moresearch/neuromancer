@@ -470,29 +470,39 @@ func isHomeDistance(halfCols, d int) bool {
 // home-column gap of the alpha rows: they keep the layout's own columns, laid
 // out from the start of their half, so a split keyboard's thumb clusters stay
 // where the keymap puts them (flush with the inner edge of each half).
+// thumbColX returns the x offset of a thumb key relative to the origin of the
+// half it is drawn in. Thumbs are a cluster of their own: an evenly spaced run
+// laid out from the half's inner edge, so the alpha rows' column separators
+// never fall between them and they line up with the inner columns.
 func (kb *vilKeyboard) thumbColX(row, col, keyWidth, keyGap int) int {
-	// Thumbs are a cluster of their own: lay them out as an evenly spaced run
-	// starting where the first thumb key sits on the grid. The alpha rows'
-	// column separators must not fall between them, which otherwise gives the
-	// cluster uneven gaps.
-	first := -1
-	index := 0
+	count := 0
 	for c := 0; c < kb.maxCols; c++ {
-		if !kb.cellPresent(row, c) {
-			continue
+		if kb.cellPresent(row, c) {
+			count++
 		}
-		if first < 0 {
-			first = c
-		}
-		if c == col {
-			break
-		}
-		index++
 	}
-	if first < 0 {
+	if count == 0 {
 		return 0
 	}
-	return kb.colX(row, first, keyWidth, keyGap) + index*homeGapStep(keyWidth, keyGap)
+	index := 0
+	for c := 0; c < col; c++ {
+		if kb.cellPresent(row, c) {
+			index++
+		}
+	}
+	// Right-align the cluster inside the half, against its inner edge. A half
+	// narrower than its thumb keys cannot happen on a real board, but clamp
+	// anyway so an offset never lands outside the matrix.
+	halfCols := kb.halfFor(col)
+	half := kb.halfWidthWithGap(halfCols, keyWidth, keyGap)
+	x := half - (count-index)*homeGapStep(keyWidth, keyGap)
+	if x < 0 {
+		return 0
+	}
+	if x+keyWidth > half {
+		return half - keyWidth
+	}
+	return x
 }
 
 // cellPresent reports whether row has a key at col.

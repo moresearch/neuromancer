@@ -545,3 +545,62 @@ func TestVilHomeColumns(t *testing.T) {
 		}
 	}
 }
+
+// Thumb keys belong to their half: their offset must be inside it, not spill
+// into the other half or the gap between the halves.
+func TestVilThumbKeysStayInTheirHalf(t *testing.T) {
+	kb := loadWideTestVil(t)
+	if !kb.splitCols {
+		t.Skip("fixture is not split by columns")
+	}
+	const kw, kg = 5, 1
+	half := kb.halfWidthWithGap(kb.halfCols, kw, kg)
+	for _, row := range []int{0} {
+		for col := 0; col < kb.maxCols; col++ {
+			if !kb.cellPresent(row, col) {
+				continue
+			}
+			x := kb.thumbColX(row, col, kw, kg)
+			if x < 0 || x+kw > half {
+				t.Errorf("row %d col %d: thumb at %d..%d outside the half (0..%d)", row, col, x, x+kw, half)
+			}
+		}
+	}
+}
+
+// The Chatsubo box sits centred in the gap between the halves.
+func TestChatsuboCentredInGap(t *testing.T) {
+	for _, vil := range []string{"", "/home/maf/.config/nm/CANONICAL_ATmega_100pct_Miryoku_3x5.vil"} {
+		for _, sw := range []int{160, 170, 199} {
+			sim := tcell.NewSimulationScreen("UTF-8")
+			if err := sim.Init(); err != nil {
+				t.Fatal(err)
+			}
+			sim.SetSize(sw, 40)
+			typ := newTestTyper(sim)
+			if vil != "" {
+				kb, err := loadVil(vil, "")
+				if err != nil {
+					sim.Fini()
+					t.Skip("layout not installed")
+				}
+				typ.vil = kb
+			}
+			typ.chatsubo = newChatsubo("", "", 0)
+			m, _ := typ.keyboardMetrics()
+			gx, split := typ.chatPanelGap(m)
+			px, _, pw, _, ok := typ.chatPanelRect(m)
+			if !split || !ok {
+				sim.Fini()
+				continue
+			}
+			if want := sw / 2; px+pw/2 != want {
+				t.Errorf("sw=%d vil=%v: panel centre %d, want %d", sw, vil != "", px+pw/2, want)
+			}
+			if px < gx || px+pw > gx+m.splitGap {
+				t.Errorf("sw=%d vil=%v: panel %d..%d outside the gap %d..%d", sw, vil != "", px, px+pw, gx, gx+m.splitGap)
+			}
+			sim.Fini()
+		}
+	}
+}
