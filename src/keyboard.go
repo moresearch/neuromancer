@@ -72,7 +72,7 @@ var (
 			Bold(true)
 	kbModStyle = tcell.StyleDefault.
 			Foreground(tcell.ColorBlack).
-			Background(tcell.NewRGBColor(0x00, 0x89, 0x86)).
+			Background(tcell.NewRGBColor(0x00, 0x60, 0x00)).
 			Bold(true)
 	kbTargetBlinkStyle = tcell.StyleDefault.
 				Foreground(tcell.ColorDarkGreen).
