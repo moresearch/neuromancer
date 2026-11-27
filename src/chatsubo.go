@@ -326,21 +326,21 @@ func (t *typer) blockBoxHeightFor(sh, boardH int) int {
 	return boxH
 }
 
-// chatsuboMaxHeight is the tallest box body: two border rows, a guidance row
-// and up to four commentary rows.
-const chatsuboMaxHeight = 6
+// chatsuboMaxHeight is the tallest box body: the title and bottom border rows
+// plus room for the practice text and its padding.
+const chatsuboMaxHeight = 8
 
-// chatsuboBoxHeight sizes the box to the window: title, guidance and a few
-// commentary rows in a tall window, a single commentary row in a short one,
-// and never more than a quarter of it so the board keeps its room.
+// chatsuboBoxHeight sizes the box to the window: room for the padded practice
+// text in a tall window, a compact body in a short one, and never more than a
+// third of it so the board keeps its room.
 func chatsuboBoxHeight(screenHeight int) int {
 	h := 3 // title, one body row
 	if screenHeight >= 36 {
 		h = chatsuboMaxHeight
 	} else if screenHeight >= 24 {
-		h = chatsuboCompactHeight // room for the guidance and a commentary row
+		h = chatsuboCompactHeight
 	}
-	if max := screenHeight / 5; h > max {
+	if max := screenHeight / 3; h > max {
 		h = max
 	}
 	if h < 3 {

@@ -511,8 +511,8 @@ func (t *typer) keyboardMetrics() (kbMetrics, bool) {
 	parts.chat.H = 0
 	if t.usesChatBox() {
 		parts.chat.H = chatsuboBoxHeight(sh)
-		if parts.chat.H > sh/4 {
-			parts.chat.H = sh / 4
+		if parts.chat.H > sh/3 {
+			parts.chat.H = sh / 3
 		}
 		if parts.chat.H < blockBoxMinHeight {
 			parts.chat.H = blockBoxMinHeight
@@ -524,17 +524,20 @@ func (t *typer) keyboardMetrics() (kbMetrics, bool) {
 			parts.stats.H = 1
 		}
 	}
-	// The practice text lives inside the chatsubo box, so the box takes the
-	// text's rows as part of its body. There is no separate text band between
-	// the box and the keys.
-	parts.text.H = sh - 2 - parts.chat.H - layoutBandPad - parts.keys.H - parts.stats.H
-	if parts.text.H > layoutTextRows {
-		parts.text.H = layoutTextRows
+	// The practice text lives inside the chatsubo box: the box body holds a
+	// title row, boxTextPad blank rows above the text, the text lines, the
+	// same padding below, and a bottom border. There is no separate text band.
+	textLines := 3
+	parts.text.H = boxTextPad*2 + textLines
+	// Shrink the padded body to the rows the window can spare, so the block
+	// always fits; keep at least one row so there is somewhere to type.
+	if spare := sh - 2 - parts.chat.H - layoutBandPad - parts.keys.H - parts.stats.H; parts.text.H > spare {
+		parts.text.H = spare
 	}
-	if parts.text.H < 2 {
-		parts.text.H = 2
+	if parts.text.H < 1 {
+		parts.text.H = 1
 	}
-	// The box body holds the text rows: one title row, the text, one border.
+	// The box body holds the padded text region.
 	parts.chat.H += parts.text.H
 
 	// The parts start where the previous one ends, so no part can overlap
@@ -955,6 +958,9 @@ const (
 	layoutBandPad   = 1
 	layoutTextRows  = 4
 	layoutStatsRows = 2
+	// boxTextPad is the blank rows above and below the practice text inside
+	// the Chatsubo box, so the text never hugs the title rule or the border.
+	boxTextPad = 3
 )
 
 // homeGapStep returns the step of one key column.

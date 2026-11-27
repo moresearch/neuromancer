@@ -635,24 +635,16 @@ func extractMistypedWords(text []rune, typed []rune) (mistakes []mistake) {
 
 func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, attribution string) (nerrs int, ncorrect int, rc int, duration time.Duration, mistakes []mistake) {
 	var startTime time.Time
-	text := []rune(s)
-	typed := make([]rune, len(text))
-
-	if len(text) == 0 {
-		rc = TyperComplete
-		return
-	}
 
 	sw, sh := scr.Size()
-	textW, nr := calcStringDimensions(s)
 
 	t.layoutTop = -1
 	t.keyboardMetrics()
 
-	nc := textW
+	nc := 0
 	x := 0
-	y := (sh - nr) / 2
-	statsY := y - 2
+	y := 0
+	statsY := 0
 
 	// The practice text draws inside the chatsubo box, padded away from the
 	// border on every side so it never hugs the frame: five columns in from the
@@ -675,16 +667,28 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			x = 1
 		}
 	}
-	// Three blank rows above the text keep it off the title rule; the last row
-	// stays clear of the bottom border.
-	y = textTop + 3
+
+	// Wrap the practice text to the interior width so every line stays inside
+	// the padding. The user never types the inserted newlines: the typer skips
+	// them automatically.
+	s = wordWrap(s, nc)
+	text := []rune(s)
+	typed := make([]rune, len(text))
+	if len(text) == 0 {
+		rc = TyperComplete
+		return
+	}
+	_, nr := calcStringDimensions(s)
+	// boxTextPad blank rows above the text keep it off the title rule; the
+	// same padding below keeps the last line clear of the bottom border.
+	y = textTop + boxTextPad
 	if y < 0 {
 		y = 0
 	}
-	// Lines the box cannot hold are clipped, so a wrapped paragraph never
-	// spills past the box's bottom border. Leave three rows of padding below.
-	if nr > t.textRows()-3 {
-		nr = t.textRows() - 3
+	// Lines the padded box cannot hold are clipped, so a wrapped paragraph
+	// never spills past the padding or the bottom border.
+	if nr > t.textRows()-2*boxTextPad {
+		nr = t.textRows() - 2*boxTextPad
 	}
 	if nr < 1 {
 		nr = 1
