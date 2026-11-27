@@ -911,9 +911,22 @@ func (kb *vilKeyboard) targetHome(row, col int) (int, int, bool) {
 
 func (kb *vilKeyboard) isHomeKey(row, col int) bool {
 	if kb.hasBoard {
-		// The resting keys follow the keymap's own home row, wherever the
-		// placement put it on the board.
+		// The resting keys follow each half's own home row. On the left half
+		// (a r s t) they sit at columns 1..4, one past the outer macro/Ctrl
+		// column; on the right half (n e i o) they sit at 2..5, one past m.
+		if kb.halfRows > 0 {
+			switch row {
+			case kb.homeRow:
+				return col >= 1 && col <= 4
+			case kb.homeRow + kb.halfRows:
+				return col >= 2 && col <= 5
+			}
+			return false
+		}
 		block := boardHomeBlockFor(kb.maxCols)
+		if block.start == 0 && block.cols >= 4 {
+			block.start = 1
+		}
 		return row == kb.homeRow && col >= block.start && col < block.start+block.cols
 	}
 	if kb.homeKeys[[2]int{row, col}] {

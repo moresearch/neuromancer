@@ -755,3 +755,46 @@ func TestVilBoardThumbMirror(t *testing.T) {
 		}
 	}
 }
+
+// TestVilBoardHomeLettersGreen checks the resting home keys (a r s t / n e i o)
+// draw in green so they stand out from the rest of the board.
+func TestVilBoardHomeLettersGreen(t *testing.T) {
+	kb, err := loadVil(os.Getenv("HOME")+"/.config/nm/CANONICAL_ATmega_100pct_Miryoku_3x5.vil", "")
+	if err != nil || !kb.hasBoard || kb.halfRows == 0 {
+		t.Skip("board layout not installed")
+	}
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer sim.Fini()
+	sim.SetSize(120, 40)
+
+	typ := newTestTyper(sim)
+	typ.vil = kb
+	m, ok := typ.keyboardMetrics()
+	if !ok {
+		t.Fatal("keyboard does not fit")
+	}
+	typ.drawVilKeyboard('q')
+	sim.Show()
+
+	width := kb.width(m.keyWidth, m.keyGap, m.splitGap)
+	x0 := (120 - width) / 2
+	rightX := x0 + kb.halfWidth(false, m.keyWidth, m.keyGap) + m.splitGap
+	homeY := kb.vilRowY(m.top, 2, m.keyH, 0) + m.keyH/2
+	for _, half := range []struct {
+		ox   int
+		cols [2]int
+		side bool
+	}{{x0, [2]int{1, 4}, false}, {rightX, [2]int{2, 5}, true}} {
+		for c := half.cols[0]; c <= half.cols[1]; c++ {
+			x := half.ox + kb.colXSide(2, c, half.side, m.keyWidth, m.keyGap) + m.keyWidth/2
+			_, _, st, _ := sim.GetContent(x, homeY)
+			fg, _, _ := st.Decompose()
+			if fg != tcell.ColorGreen {
+				t.Errorf("side right=%v col %d home letter fg=%v, want green", half.side, c, fg)
+			}
+		}
+	}
+}
