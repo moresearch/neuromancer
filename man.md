@@ -293,18 +293,37 @@ are determined exclusively by the input.
   columns. If it guesses wrong, override it with **-vil-split rows**,
   **-vil-split cols**, or **-vil-split none**.
 
-  The matrix scales to the terminal: it uses the largest key cells that fit,
-  draws keys as beveled button keycaps, keeps a wide gap between the halves,
-  and leaves padding below the keyboard. Terminal font size itself is
-  controlled by your terminal emulator.
+  The window is divided into three horizontal parts, top to bottom: the
+  Chatsubo box, the keyboard, and the live stats. The practice text has its own
+  band between the box and the keys. Every part is placed inside the rows it
+  owns, so nothing spills into another part however small the terminal is, and
+  the parts shrink in a fixed order as the window gets shorter: the box's extra
+  commentary first, then the equalizer, then the box's body, then the keyboard's
+  caps.
+
+  The matrix scales to the terminal. Caps are drawn as closed keycaps with a
+  top border, a label and a bottom border when the rows allow, text is packed
+  against the next key, and caps never grow past five cells, so the board keeps
+  the shape of a keyboard instead of a wall of squares. A window too narrow for
+  closed caps draws the same two hands as single-line keys (a tag for the home
+  row modifier, the key's first character otherwise), and a window too narrow
+  even for that draws one block with the hands still separated. The board is one
+  continuous grid: the hands are separated by two blank columns, and the outer
+  function/macro column of each hand sits one cell apart from the alphas.
+  Terminal font size itself is controlled by your terminal emulator.
 
   The matrix is drawn as a clean grid rather than a replica of the physical
-  board: every row starts on the same column, both halves are the same width,
-  and the thumb keys sit on that same grid, flush with the inner edge of each
-  half. The home keys `a r s t` and `n e i o` keep the columns they have on the
-  keyboard, and their cluster is set off from the rest of the row by about half
-  a key width of blank space on each side. For a Vial layout the columns come
-  from the keymap itself. On a
+  board: every row starts on the same column, and the   thumb keys sit on that
+  same grid, flush with the inner edge of each half on a row of their own, a
+  line below the letter rows. The home keys `a r s t` and `n e i o` keep the
+  columns they have on the keyboard, and their cluster is set off from the
+  rest of the row by most of a key width of blank space, so reaching for a key
+  outside the home columns shows as a jump. For a Vial layout the columns come
+  from the keymap itself, and each half is laid out from its own inner edge.
+  The edge function/macro columns and the top function row of each half are
+  drawn a little apart from the central typing block (detected by which cells
+  produce no typing character), so the keys you actually type on stay visually
+  separate from the ones you don't. On a
   terminal too narrow for the split layout the whole keyboard is drawn as one
   block, with the halves still separated.
 
@@ -328,8 +347,9 @@ are determined exclusively by the input.
   **-vil** so layer and HRM guidance stays active.
 
   Book mode uses Ollama by default: each sprint types a one-sentence summary
-  (20 words max) of a random paragraph, displayed inside the Chatsubo panel
-  between the keyboard halves. A small queue of summaries is prefetched before
+  (20 words max) of a random paragraph. The practice text goes in its own band
+  under the Chatsubo panel, which is a band above the keys in every mode. A
+  small queue of summaries is prefetched before
   the UI starts (with a progress line) and refilled in the background, so the
   next sprint starts immediately. The blocking report screen is skipped so the
   sprints flow into each other. Use **-books-raw** to type the paragraph itself:
@@ -339,7 +359,7 @@ are determined exclusively by the input.
   ```
 
   Live **-chatsubo** commentary is disabled in book sprint mode because the
-  panel is the typing area.
+  panel shows the countdown and the sprint status instead of commentary.
 
 ## OLLAMA
 
@@ -359,18 +379,23 @@ are determined exclusively by the input.
   short typed excerpt, the current key guidance, and the loaded `.vil` to
   Ollama. The model studies every layer, layer activator, and HRM, then gives a
   concrete tip about doing something on a named layer. It keeps the last three
-  tips in the prompt to avoid repeats. The panel sits in the widened gap
-  between the keyboard halves: 40 columns wide and about three key rows high
-  plus a few rows, with two columns of horizontal padding and one blank padding
-  row above and below the body. It shows the current layer/shift guidance line
-  first (for example `hold o (shift) + press p`), followed by wrapped model
-  commentary. Each request also includes the target finger in plain terms
-  (left/right pinky, ring, middle, index, thumb), and Chatsubo is instructed to
-  name it and give ergonomic Miryoku/Colemak-DH advice using home-row,
-  home-column, reach, layer, and thumb-key language. Guidance and commentary are
-  clipped to the body capacity, so they cannot spill outside the box. On
-  terminals narrower than 100 columns the panel is omitted and the keyboard
-  keeps its normal split gap.
+  tips in the prompt to avoid repeats. The window is three horizontal parts,
+  top to bottom: the panel in the first, the keyboard in the second, the live
+  equalizer and readout in the third, with the practice text in its own band
+  between the panel and the keys. The panel is exactly as wide as the keyboard
+  and shares its columns, so the block reads as one rectangle; it carries the
+  current layer/shift guidance line first (for example `hold o (shift) + press
+  p`), followed by wrapped model commentary. Each part is drawn only inside its
+  own rows, so the text can never run into the panel and the panel can never run
+  into the keys. In sprint mode the same panel is the top band, above the
+  practice text and the keys. Each request
+  also includes the target finger in plain terms (left/right pinky, ring,
+  middle, index, thumb), and Chatsubo is instructed to name it and give
+  ergonomic Miryoku/Colemak-DH advice using home-row, home-column, reach, layer,
+  and thumb-key language. Guidance and commentary are clipped to the body
+  capacity, so they cannot spill outside the box. The panel is drawn at any
+  terminal width that leaves it a readable box; a narrower one is dropped and
+  the keyboard keeps the full window.
   **-chatsubo-every** controls the period (default `2m`; use `30s` for a quick
   test).
 

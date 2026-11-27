@@ -7,15 +7,24 @@ quotes, books, generated drills, or live coaching.
 
 ![nm typing session](docs/plain.png)
 
+The layout `nm` draws comes straight from the keymap of a board like this one, a
+Corne 4x6 with choc switches, in 3x5 Miryoku:
+
+<img src="docs/corne-choc-4x6.png" alt="Corne 4x6 choc keyboard" width="360">
+
 ## Features
 
 - Word, quote, file, stdin, and random-book practice.
 - Built-in Colemak-DH matrix with shifted-key guidance.
 - Vial `.vil` support: layer matrices, HRMs, layer activators, automatic split
   detection, and inferred layer names (`num/sym`, `mouse`, `fn/media`, …).
-- The matrix is a clean grid: every row aligned to the same columns, equal
-  halves, and thumb keys on that grid at each half's inner edge. The home
-  cluster (`arst` / `oien`) is set off by half a key width of blank space.
+- The matrix is a clean grid: every row aligned to the same columns, and thumb
+  keys on that grid at each half's inner edge. Each half of a `.vil` matrix is
+  laid out from its own inner edge. The home cluster (`arst` / `oien`) is set
+  off by most of a key width of blank space on the side facing the other keys,
+  so reaching outside it reads as a jump. The edge function/macro columns and
+  the top function row are drawn a little apart from the central typing block,
+  so the keys you don't type on stay out of the way.
 - Physical layer tracking on Linux through the Vial raw HID interface: hold a
   thumb layer key and the display switches to that layer. Momentary, layer-tap,
   toggle (`TG`), `TO`, `DF`, and tap-dance (`TD`) layer keys are all followed.
@@ -192,7 +201,7 @@ nm -vil "$VIL" -model qwen3:0.6b -gen "sym layer, avoid numbers"
 ```
 
 ```bash
-# 7. Live Chatsubo coaching in the panel between the keyboard halves.
+# 7. Live Chatsubo coaching in the band above the keyboard.
 nm -vil "$VIL" -layernames base,mouse,num,fn,shift,ctrl \
   -chatsubo -chatsubo-every 1m -model qwen3.5:0.8b
 ```
@@ -277,8 +286,9 @@ Paragraphs shorter than 80 characters are skipped, which filters out headings
 and page numbers. The `./books` directory is gitignored.
 
 Book mode uses Ollama by default: it asks for a one-sentence summary (20 words
-max) of a random paragraph and uses that as the sprint text. The text is shown
-inside the Chatsubo panel between the keyboard halves. A small queue of
+max) of a random paragraph and uses that as the sprint text. The text is typed
+in its own band under the Chatsubo panel, which is a band above the keys in
+every mode. A small queue of
 summaries is prefetched before the UI starts (with a progress line) and
 refilled in the background, so the next sprint starts immediately. The blocking
 report screen is skipped so the sprints flow into each other.
@@ -290,7 +300,7 @@ nm -books ./books -books-raw
 ```
 
 Live `-chatsubo` commentary is disabled in book sprint mode because the panel
-is the typing area.
+shows the sprint countdown and status instead of commentary.
 
 ### Vial keymaps
 
@@ -440,15 +450,22 @@ The model gives concrete layer tips such as:
 Num/sym layer: hold LT2 with your left thumb and press w for @.
 ```
 
-The panel sits in the widened gap between the keyboard halves (40 columns wide,
-about three key rows high plus a few rows, with two columns of side padding). It
-shows one guidance line and wrapped commentary, all clipped to the panel body.
+The window is three horizontal parts, top to bottom: the panel, the keyboard,
+and the live stats (equalizer plus readout). The practice text has its own band
+between the panel and the keys. Each part is drawn only inside its own rows, so
+the text cannot run into the panel and the panel cannot run into the keys at any
+terminal size. The panel is exactly as wide as the keyboard, so the two share
+one rectangle. As the window gets shorter the parts give way in a fixed order
+(the box's extra commentary, the equalizer, the box's body, then the caps), and
+as it gets narrower the caps shrink to single-line keys; the board stays one
+continuous grid, with the hands kept readable by their home gaps and outer macro
+columns and two blank columns between them. In sprint mode the box is the same
+top band, with the countdown in its rule and the sprint status under it.
 Every request includes the target finger in plain terms (left/right pinky,
 ring, middle, index, thumb), and Chatsubo is instructed to name the finger and
 give ergonomic Miryoku/Colemak-DH advice using home-row, home-column, reach,
-layer, and thumb-key language, without numeric finger codes. On terminals
-narrower than 100 columns the panel is omitted and the keyboard keeps its normal
-split gap.
+layer, and thumb-key language, without numeric finger codes. On a terminal too
+narrow for a readable box the panel is omitted and the guidance line remains.
 
 Options:
 
