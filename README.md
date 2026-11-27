@@ -287,9 +287,8 @@ and page numbers. The `./books` directory is gitignored.
 
 Book mode uses Ollama by default: it asks for a one-sentence summary (20 words
 max) of a random paragraph and uses that as the sprint text. The text is typed
-in its own band under the Chatsubo panel, which is a band above the keys in
-every mode. A small queue of
-summaries is prefetched before the UI starts (with a progress line) and
+inside the Chatsubo panel, which sits above the keys in every mode. A small
+queue of summaries is prefetched before the UI starts (with a progress line) and
 refilled in the background, so the next sprint starts immediately. The blocking
 report screen is skipped so the sprints flow into each other.
 
@@ -341,7 +340,7 @@ nm -vil ~/keyboards/sofle.vil lesson.txt
 
 The bottom matrix highlights the sequence:
 
-- **cyan** — layer activator and/or shift key to hold
+- **dark green** — layer activator, shift key, or a pressed key
 - **green** — final target key
 - **red** — most recent wrong key
 
@@ -451,16 +450,16 @@ Num/sym layer: hold LT2 with your left thumb and press w for @.
 ```
 
 The window is three horizontal parts, top to bottom: the panel, the keyboard,
-and the live stats (equalizer plus readout). The practice text has its own band
-between the panel and the keys. Each part is drawn only inside its own rows, so
-the text cannot run into the panel and the panel cannot run into the keys at any
-terminal size. The panel is exactly as wide as the keyboard, so the two share
-one rectangle. As the window gets shorter the parts give way in a fixed order
-(the box's extra commentary, the equalizer, the box's body, then the caps), and
-as it gets narrower the caps shrink to single-line keys; the board stays one
-continuous grid, with the hands kept readable by their home gaps and outer macro
-columns and two blank columns between them. In sprint mode the box is the same
-top band, with the countdown in its rule and the sprint status under it.
+and the live stats (equalizer plus readout). The practice text is drawn inside
+the panel, word-wrapped to the panel's interior and padded away from its border,
+so there is no separate text band. The panel is exactly as wide as the keyboard,
+so the two share one rectangle. As the window gets shorter the parts give way in
+a fixed order (the panel's padding, then its text lines, then the equalizer,
+then the caps), and as it gets narrower the caps shrink to single-line keys. The
+board is one contiguous grid with the keys touching: every grid position is a
+real key, unused ones drawn empty and lighting up when pressed, and only the
+split gap separates the two halves. In sprint mode the panel is the same top
+band, with the countdown in its rule.
 Every request includes the target finger in plain terms (left/right pinky,
 ring, middle, index, thumb), and Chatsubo is instructed to name the finger and
 give ergonomic Miryoku/Colemak-DH advice using home-row, home-column, reach,

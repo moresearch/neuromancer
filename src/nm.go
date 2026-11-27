@@ -260,7 +260,7 @@ Aesthetics
 
     -theme THEMEFILE    The theme to use.
     -w N                The maximum line length in characters (default: fit
-                        the keyboard width). Ignored if -raw is present.
+                        the box width). Ignored if -raw is present.
     -notheme            Attempt to use the default terminal theme.
                         This may produce odd results depending
                         on the theme colours.

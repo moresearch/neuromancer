@@ -44,7 +44,7 @@ usage: nm \[OPTION\]... \[FILE\]
 -vil *FILE*
 
 : Load a Vial `.vil` keymap. If omitted, `~/.config/nm/*.vil` is used when
-  exactly one layout is installed there. While typing, the matrix and the layer required for the next character are shown. Green marks the key to press, cyan marks the layer or shift key to hold, and red marks the most recent wrong key.
+  exactly one layout is installed there. While typing, the matrix and the layer required for the next character are shown. Green marks the key to press, dark green marks the layer or shift key to hold, and red marks the most recent wrong key.
 
 -layernames *NAMES*
 
@@ -92,7 +92,7 @@ usage: nm \[OPTION\]... \[FILE\]
 
 -chatsubo
 
-: Show live Chatsubo commentary from Ollama in a box between the practice text and the keyboard. Uses **-ollama** and **-model**.
+: Show live Chatsubo commentary from Ollama in the box above the keyboard. The practice text is typed inside this box. Uses **-ollama** and **-model**.
 
 -chatsubo-every *DURATION*
 
@@ -237,9 +237,9 @@ are determined exclusively by the input.
 # VIAL KEYMAPS
 
   The `.vil` file is used directly; just pass its path. The **-layernames**
-  values are matched by position to the layers in the file. For a 60-key Sofle
-  layout the matrix is rendered as a split 6x4 keyboard with five thumb keys
-  per hand.
+  values are matched by position to the layers in the file. A Miryoku-style
+  5x3+3 matrix is rendered as a seven-column split board, the two halves on the
+  same columns, with each half's thumb keys at its inner edge.
 
   Use **-vil-info** to print the parsed matrix and every layer, then exit. Both
   string and numeric QMK keycodes are accepted, and flat Sofle/Corne `LAYOUT`
@@ -266,7 +266,7 @@ are determined exclusively by the input.
   classified from their contents (`num/sym`, `mouse`, `fn/media`, `fn/shift`,
   `fn/ctrl`, `nav`, `shift`, `ctrl`), and those names are used in guidance and
   Chatsubo tips. The sequence is highlighted on the matrix: the layer activator
-  and shift key are cyan, the target key is green, and the hint text spells out
+  and shift key are dark green, the target key is green, and the hint text spells out
   the order, for example `hold LT2 (num/sym) + press 5`. The border of the key to
   press blinks green and white; the key keeps its normal background. The inactive
   half is dimmed. Only the ten resting keys — four finger home keys per hand
@@ -275,7 +275,7 @@ are determined exclusively by the input.
   even when the `.vil` matrix has an extra inner or outer column. Only the border
   of the key to press blinks green/white; the resting keys stay static with a dim
   green label and the same border as the other keys. The thumb home is the space thumb if the
-  layer has one, otherwise the innermost thumb key. A layer or shift key on the opposite half stays highlighted in cyan,
+  layer has one, otherwise the innermost thumb key. A layer or shift key on the opposite half stays highlighted in dark green,
   since Miryoku-style layers often use the opposite thumb. Shift guidance uses
   the opposite half from the key being pressed: if `p` is on the left half, the
   right half's shift is recommended. The status line under the matrix spells
@@ -294,38 +294,36 @@ are determined exclusively by the input.
   **-vil-split cols**, or **-vil-split none**.
 
   The window is divided into three horizontal parts, top to bottom: the
-  Chatsubo box, the keyboard, and the live stats. The practice text has its own
-  band between the box and the keys. Every part is placed inside the rows it
-  owns, so nothing spills into another part however small the terminal is, and
-  the parts shrink in a fixed order as the window gets shorter: the box's extra
-  commentary first, then the equalizer, then the box's body, then the keyboard's
-  caps.
+  Chatsubo box, the keyboard, and the live stats. The practice text is typed
+  inside the box: word-wrapped to the box's interior and padded three rows above
+  and below and several columns in from the border, so it never hugs the frame
+  and there is no separate text band. The box is exactly as wide as the keyboard
+  (both splits plus the split gap), so the two share one rectangle. Every part
+  is placed inside the rows it owns, so nothing spills into another part however
+  small the terminal is, and the parts shrink in a fixed order as the window gets
+  shorter: the box's padding and text lines first, then the equalizer, then the
+  keyboard's caps.
 
   The matrix scales to the terminal. Caps are drawn as closed keycaps with a
-  top border, a label and a bottom border when the rows allow, text is packed
-  against the next key, and caps never grow past five cells, so the board keeps
-  the shape of a keyboard instead of a wall of squares. A window too narrow for
-  closed caps draws the same two hands as single-line keys (a tag for the home
-  row modifier, the key's first character otherwise), and a window too narrow
-  even for that draws one block with the hands still separated. The board is one
-  continuous grid: the hands are separated by two blank columns, and the outer
-  function/macro column of each hand sits one cell apart from the alphas.
-  Terminal font size itself is controlled by your terminal emulator.
+  top border, a label and a bottom border when the rows allow, and caps never
+  grow past five cells, so the board keeps the shape of a keyboard instead of a
+  wall of squares. A window too narrow for closed caps draws the same two hands
+  as single-line keys (a tag for the home row modifier, the key's first
+  character otherwise), and a window too narrow even for that draws one block
+  with the hands still separated. Terminal font size itself is controlled by
+  your terminal emulator.
 
-  The matrix is drawn as a clean grid rather than a replica of the physical
-  board: every row starts on the same column, and the   thumb keys sit on that
-  same grid, flush with the inner edge of each half on a row of their own, a
-  line below the letter rows. The home keys `a r s t` and `n e i o` keep the
-  columns they have on the keyboard, and their cluster is set off from the
-  rest of the row by most of a key width of blank space, so reaching for a key
-  outside the home columns shows as a jump. For a Vial layout the columns come
-  from the keymap itself, and each half is laid out from its own inner edge.
-  The edge function/macro columns and the top function row of each half are
-  drawn a little apart from the central typing block (detected by which cells
-  produce no typing character), so the keys you actually type on stay visually
-  separate from the ones you don't. On a
-  terminal too narrow for the split layout the whole keyboard is drawn as one
-  block, with the halves still separated.
+  The board is one contiguous grid with the keys touching: no spaces between
+  caps, and only the split gap separates the two halves. Every grid position is
+  a real key. A position the keymap leaves empty is still drawn as a keycap and
+  lights up (dark green) when you press it, so the whole physical matrix is
+  visible. The pressed key, and any held layer or shift key, is highlighted in
+  dark green. The resting home keys `a r s t` and `n e i o` draw their letters in
+  green. For a Vial layout each half is laid out from its own inner edge on seven
+  columns, and the thumb clusters sit at the inner edge of their own half on a
+  row of their own, a line below the letter rows. On a terminal too narrow for
+  the split layout the whole keyboard is drawn as one block, with the halves
+  still separated.
 
   Use **-drill** to generate a test from the characters which require a
   non-base layer. Any text file can also be used as a lesson:
@@ -347,8 +345,8 @@ are determined exclusively by the input.
   **-vil** so layer and HRM guidance stays active.
 
   Book mode uses Ollama by default: each sprint types a one-sentence summary
-  (20 words max) of a random paragraph. The practice text goes in its own band
-  under the Chatsubo panel, which is a band above the keys in every mode. A
+  (20 words max) of a random paragraph. The practice text is typed inside the
+  Chatsubo panel, which sits above the keys in every mode. A
   small queue of summaries is prefetched before
   the UI starts (with a progress line) and refilled in the background, so the
   next sprint starts immediately. The blocking report screen is skipped so the
@@ -381,14 +379,12 @@ are determined exclusively by the input.
   concrete tip about doing something on a named layer. It keeps the last three
   tips in the prompt to avoid repeats. The window is three horizontal parts,
   top to bottom: the panel in the first, the keyboard in the second, the live
-  equalizer and readout in the third, with the practice text in its own band
-  between the panel and the keys. The panel is exactly as wide as the keyboard
-  and shares its columns, so the block reads as one rectangle; it carries the
-  current layer/shift guidance line first (for example `hold o (shift) + press
-  p`), followed by wrapped model commentary. Each part is drawn only inside its
-  own rows, so the text can never run into the panel and the panel can never run
-  into the keys. In sprint mode the same panel is the top band, above the
-  practice text and the keys. Each request
+  equalizer and readout in the third. The practice text is typed inside the
+  panel: word-wrapped to the panel's interior and padded three rows above and
+  below and several columns in from the border, so it never hugs the frame. The
+  panel is exactly as wide as the keyboard and shares its columns, so the block
+  reads as one rectangle. Each part is drawn only inside its own rows. In sprint
+  mode the same panel is the top band, with the countdown in its rule.
   also includes the target finger in plain terms (left/right pinky, ring,
   middle, index, thumb), and Chatsubo is instructed to name it and give
   ergonomic Miryoku/Colemak-DH advice using home-row, home-column, reach, layer,

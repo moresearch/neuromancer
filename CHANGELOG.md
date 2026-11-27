@@ -1,4 +1,16 @@
 # Unreleased:
+ - The practice text now lives inside the Chatsubo box, word-wrapped to its
+   interior and padded three rows above and below and several columns in from
+   the border, so there is no separate text band and the text never hugs the
+   frame. The box is exactly as wide as the board (both splits plus the split
+   gap) and grows tall enough for a few wrapped lines.
+ - The board is drawn with the keys touching: no gap between caps, and only the
+   split gap separates the two halves. The physical matrix spans seven columns
+   per split, and every grid position is a real key. A position the keymap
+   leaves empty is still drawn as a keycap and lights up when pressed. Pressed
+   keys and held layer/shift keys highlight in dark green (was cyan); the
+   resting home keys `a r s t` / `n e i o` draw their letters in green. Thumb
+   clusters sit at the inner edge of their own half, with no filler keys.
  - The layout uses the window's vertical space better: key caps grow to up to
    two rows and the leftover height is spent on a gap between the rows, so a
    tall terminal gets a clear board, capped at the block's share of the window
