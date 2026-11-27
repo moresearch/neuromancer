@@ -359,11 +359,12 @@ func (t *typer) chatBand() (x, y, width, height int, ok bool) {
 	// gives up its sides before the board does.
 	width = chatsuboBoxWidth
 	x = (sw - width) / 2
-	if _, _, kbOK := t.boardBand(); kbOK {
-		// The box spans the full screen width, centred, so the commentary has
-		// room; the board sits inside it on the columns below.
-		x = 1
-		width = sw - 2
+	if bx, bw, kbOK := t.boardBand(); kbOK && bw > 0 {
+		// The box is exactly as wide as the board (both halves plus the split
+		// gap) and sits on the same columns, so the panel and the keys read as
+		// one rectangle.
+		x = bx
+		width = bw
 	}
 	if width > sw-2 {
 		width = sw - 2

@@ -94,9 +94,9 @@ func TestPartsAreCentred(t *testing.T) {
 	}
 }
 
-// TestBoxContainsBoard keeps the box centred on the board and at least as wide,
-// so the keyboard never pokes out of the panel above it.
-func TestBoxContainsBoard(t *testing.T) {
+// TestBoxMatchesBoard checks the box is exactly as wide as the board and on
+// the same columns, so the panel and the keys read as one rectangle.
+func TestBoxMatchesBoard(t *testing.T) {
 	for _, sz := range tightSizes {
 		typ := newLayoutTyper(t, sz[0], sz[1])
 		boardX, boardW, kbOK := typ.boardBand()
@@ -107,11 +107,8 @@ func TestBoxContainsBoard(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if w < boardW {
-			t.Errorf("%dx%d: box %d wide, board %d", sz[0], sz[1], w, boardW)
-		}
-		if x > boardX || x+w < boardX+boardW {
-			t.Errorf("%dx%d: box %d..%d does not hold board %d..%d",
+		if w != boardW || x != boardX {
+			t.Errorf("%dx%d: box %d..%d, want board %d..%d",
 				sz[0], sz[1], x, x+w, boardX, boardX+boardW)
 		}
 	}

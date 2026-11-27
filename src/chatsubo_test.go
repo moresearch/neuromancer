@@ -353,16 +353,12 @@ func TestBoxMatchesKeyboardWidth(t *testing.T) {
 			t.Fatalf("%dx%d: no box", sz[0], sz[1])
 		}
 		kbW := typ.keyboardWidth(m)
-		if width < kbW {
-			t.Errorf("%dx%d: box width %d, keyboard width %d", sz[0], sz[1], width, kbW)
+		// The box is exactly the keyboard's width, on the same columns.
+		if width != kbW {
+			t.Errorf("%dx%d: box width %d, want keyboard width %d", sz[0], sz[1], width, kbW)
 		}
-		// The box is centred on the screen and the board sits inside it.
-		if want := (sz[0] - width) / 2; x != want {
-			t.Errorf("%dx%d: box left %d, want centred %d", sz[0], sz[1], x, want)
-		}
-		if kbLeft := (sz[0] - kbW) / 2; x > kbLeft || x+width < kbLeft+kbW {
-			t.Errorf("%dx%d: box %d..%d does not hold keyboard %d..%d",
-				sz[0], sz[1], x, x+width, kbLeft, kbLeft+kbW)
+		if want := (sz[0] - kbW) / 2; x != want {
+			t.Errorf("%dx%d: box left %d, want keyboard left %d", sz[0], sz[1], x, want)
 		}
 		sim.Fini()
 	}

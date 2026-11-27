@@ -690,10 +690,9 @@ func TestChatsuboCentredOnBoard(t *testing.T) {
 				sim.Fini()
 				continue
 			}
-			// The box may be wider than the board, but it is centred on it
-			// and must fully contain it.
-			if pw < bw || px > bx || px+pw < bx+bw {
-				t.Errorf("sw=%d vil=%v: box %d..%d does not hold board %d..%d", sw, vil != "", px, px+pw, bx, bx+bw)
+			// The box is exactly the board's width, on the same columns.
+			if pw != bw || px != bx {
+				t.Errorf("sw=%d vil=%v: box %d..%d, want board %d..%d", sw, vil != "", px, px+pw, bx, bx+bw)
 			}
 			sim.Fini()
 		}
