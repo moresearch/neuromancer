@@ -654,17 +654,14 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	y := (sh - nr) / 2
 	statsY := y - 2
 
-	// The practice text draws inside the chatsubo box: its interior columns
-	// (inside the borders and a padding column each side) and the box's text
-	// rows. Position, width and row count all come from the box band.
-	textTop, _, _, _ := t.layoutFrame()
 	// The practice text draws inside the chatsubo box, padded away from the
-	// border on every side so it never hugs the frame: two columns in from the
+	// border on every side so it never hugs the frame: five columns in from the
 	// border horizontally and a blank row above.
+	textTop, _, _, _ := t.layoutFrame()
 	bx, _, bw, _, boxOK := t.chatBand()
 	if boxOK {
-		x = bx + 3
-		nc = bw - 6
+		x = bx + 6
+		nc = bw - 12
 		if nc < 1 {
 			nc = 1
 		}
@@ -678,16 +675,16 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			x = 1
 		}
 	}
-	// One blank row above the text keeps it off the title rule; the last row
+	// Three blank rows above the text keep it off the title rule; the last row
 	// stays clear of the bottom border.
-	y = textTop + 1
+	y = textTop + 3
 	if y < 0 {
 		y = 0
 	}
 	// Lines the box cannot hold are clipped, so a wrapped paragraph never
-	// spills past the box's bottom border.
-	if nr > t.textRows()-1 {
-		nr = t.textRows() - 1
+	// spills past the box's bottom border. Leave three rows of padding below.
+	if nr > t.textRows()-3 {
+		nr = t.textRows() - 3
 	}
 	if nr < 1 {
 		nr = 1
