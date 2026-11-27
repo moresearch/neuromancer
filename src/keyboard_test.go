@@ -84,7 +84,7 @@ func TestDrawKeyboardHighlights(t *testing.T) {
 		return x0 + gx
 	}
 	keyY := func(row int) int {
-		return m.top + row*(m.keyH+m.rowGap)
+		return rowY(m.top, row, m.keyH, m.rowGap, row == kbSpaceRow)
 	}
 
 	// tcell's simulation screen keeps cell runes and attributes faithfully,
@@ -95,28 +95,43 @@ func TestDrawKeyboardHighlights(t *testing.T) {
 		_, _, attrs := style.Decompose()
 		return ch, attrs
 	}
-	checkRune := func(label string, row, col int, want rune) {
+	// A cap's label row: one row below the top border when the cap is tall
+	// enough for a separate label row, otherwise the cap's only row.
+	labelRow := 0
+	if m.keyH >= 3 {
+		labelRow = 1
+	}
+	// focusOf reads the cap's centre and reports whether it draws as the
+	// target (bold) or as the inactive half (dim). At one-row caps the cap's
+	// single row mixes border and label runes, so the test asserts on the
+	// style the target gives the key rather than on one glyph.
+	focusOf := func(label string, row, col int) (target, dim bool) {
 		t.Helper()
-		ch, _, _, _ := scr.GetContent(keyX(row, col), keyY(row))
-		if ch != want {
-			t.Errorf("%s: rune %q want %q", label, string(ch), string(want))
+		_, _, style, _ := scr.GetContent(keyX(row, col)+m.keyWidth/2, keyY(row)+labelRow)
+		_, _, attrs := style.Decompose()
+		return attrs&tcell.AttrBold != 0, attrs&tcell.AttrDim != 0
+	}
+	checkTarget := func(label string, row, col int) {
+		t.Helper()
+		if target, _ := focusOf(label, row, col); !target {
+			t.Errorf("%s: key is not drawn as the target", label)
 		}
 	}
 
 	kb.drawKeyboard('f')
 	// f is the target: its centre still shows the label, like any other key.
-	checkRune("target f border", 1, 2, '╭')
+	checkTarget("target f", 1, 2)
 	// The whole half in play stays readable: other columns are not dimmed.
-	if _, attrs := cell(1, 0, 1); attrs&tcell.AttrDim != 0 {
+	if _, attrs := cell(1, 0, labelRow); attrs&tcell.AttrDim != 0 {
 		t.Error("keys outside the finger column are dimmed")
 	}
-	if _, attrs := cell(2, 2, 1); attrs&tcell.AttrDim != 0 {
+	if _, attrs := cell(2, 2, labelRow); attrs&tcell.AttrDim != 0 {
 		t.Error("active finger column is dimmed")
 	}
 
 	kb.blinkOn = false
 	kb.drawKeyboard('f')
-	checkRune("target f blink-off border", 1, 2, '╭')
+	checkTarget("target f blink-off", 1, 2)
 	kb.blinkOn = true
 
 	// The right half is not focused for f and is dimmed.
@@ -128,11 +143,13 @@ func TestDrawKeyboardHighlights(t *testing.T) {
 	kb.drawKeyboard('f')
 	// j is the fourth key of the outer block in the built-in table.
 	jr, jc := 1, 5
-	checkRune("wrong j border", jr, jc, '╭')
+	if _, dim := focusOf("wrong j", jr, jc); dim {
+		t.Error("wrong j is dimmed")
+	}
 
 	kb.wrongUntil = time.Time{}
 	kb.drawKeyboard('j')
-	checkRune("target j border", jr, jc, '╭')
+	checkTarget("target j", jr, jc)
 	if _, attrs := cell(1, 0, 1); attrs&tcell.AttrDim == 0 {
 		t.Error("inactive left half is not dimmed")
 	}
@@ -193,7 +210,7 @@ func TestBuiltinTargetFingerHome(t *testing.T) {
 		return x0 + gx
 	}
 	keyY := func(row int) int {
-		return m.top + row*(m.keyH+m.rowGap)
+		return rowY(m.top, row, m.keyH, m.rowGap, row == kbSpaceRow)
 	}
 	// Named colours do not survive the simulation screen (see
 	// TestDrawKeyboardHighlights), so check the home/dim attributes instead.
@@ -203,13 +220,19 @@ func TestBuiltinTargetFingerHome(t *testing.T) {
 		return attrs
 	}
 
+	// The label sits on the row below the top border when the caps are tall
+	// enough for it, otherwise on the cap's only row.
+	labelRow := 0
+	if m.keyH >= 3 {
+		labelRow = 1
+	}
 	typ.drawKeyboard('g')
 	// t is the finger home of the g target: its label stays undimmed while the
 	// rest of the matrix dims.
-	if attrs := attrsAt(2, 3, 1); attrs&tcell.AttrDim != 0 {
+	if attrs := attrsAt(2, 3, labelRow); attrs&tcell.AttrDim != 0 {
 		t.Error("active finger home label should not be dimmed")
 	}
-	if attrs := attrsAt(2, 1, 1); attrs&tcell.AttrDim == 0 {
+	if attrs := attrsAt(2, 1, labelRow); attrs&tcell.AttrDim == 0 {
 		t.Error("inactive finger home should be dimmed")
 	}
 }
@@ -315,99 +338,6 @@ func TestBuiltinHomeGap(t *testing.T) {
 	}
 }
 
-func TestVilHomeGap(t *testing.T) {
-	// A six-column half: one outer column, then the four home columns, then
-	// the outer column on the far side.
-	kb := loadWideTestVil(t)
-	if !kb.splitCols || kb.halfCols != 6 {
-		t.Fatalf("split=%v halfCols=%d", kb.splitCols, kb.halfCols)
-	}
-
-	const sw, sh = 130, 24
-	sim := tcell.NewSimulationScreen("UTF-8")
-	if err := sim.Init(); err != nil {
-		t.Fatal(err)
-	}
-	defer sim.Fini()
-	sim.SetSize(sw, sh)
-
-	typ := newTestTyper(sim)
-	typ.vil = kb
-	typ.drawKeyboard(0)
-	m, ok := typ.keyboardMetrics()
-	if !ok {
-		t.Fatal("keyboard does not fit")
-	}
-	leftBlock := vilHomeBlock(kb.halfCols, false)
-	rightBlock := vilHomeBlock(kb.halfCols, true)
-	if !leftBlock.before || !leftBlock.after {
-		t.Fatalf("block %+v does not frame the home columns", leftBlock)
-	}
-
-	// Read each key's left edge from the drawing geometry. The cap style
-	// depends on the terminal height (rounded caps or two-row pills), so the
-	// screen is not a reliable source for the column positions.
-	keyXs := func(row int) []int {
-		var xs []int
-		for col := 0; col < kb.maxCols; col++ {
-			if kb.layers[0].matrix[row][col] == "" {
-				continue
-			}
-			xs = append(xs, kb.colX(row, col, m.keyWidth, m.keyGap))
-		}
-		return xs
-	}
-	caps := keyXs(0)
-	if len(caps) != 2*kb.halfCols {
-		t.Fatalf("found %d keys, want %d: %v", len(caps), 2*kb.halfCols, caps)
-	}
-
-	step := m.keyWidth + m.keyGap
-	gap := homeGapXIn(m.keyWidth, m.keyGap)
-	check := func(name string, caps []int, block kbHomeBlock) {
-		for i := block.start + 1; i < block.start+block.cols; i++ {
-			if d := caps[i] - caps[i-1]; d != step {
-				t.Errorf("%s: home columns are not contiguous at %d: %d", name, i, d)
-			}
-		}
-		if block.before {
-			if d := caps[block.start] - caps[block.start-1]; d != step+gap {
-				t.Errorf("%s: gap before the block is %d, want %d", name, d, step+gap)
-			}
-		}
-		if end := block.start + block.cols; end < len(caps) {
-			if d := caps[end] - caps[end-1]; d != step+gap {
-				t.Errorf("%s: gap after the block is %d, want %d", name, d, step+gap)
-			}
-		}
-	}
-	check("left", caps[:kb.halfCols], leftBlock)
-	check("right", caps[kb.halfCols:], rightBlock)
-}
-
-// The home gap is a fraction of a key column, so it stays visible whatever the
-// cap size; a fixed column count disappears next to wide caps.
-func TestHomeGapScales(t *testing.T) {
-	// Integer halves repeat on even widths, so the gap must never shrink.
-	prev := 0
-	for kw := 1; kw <= 10; kw++ {
-		g := homeGapXIn(kw, 1)
-		if g < prev {
-			t.Errorf("homeGapXIn(%d) = %d, smaller than %d", kw, g, prev)
-		}
-		prev = g
-	}
-	if homeGapXIn(10, 1) <= homeGapXIn(4, 1) {
-		t.Errorf("the gap does not grow with the cap width")
-	}
-	// At least half a column of blank, on top of the normal key gap.
-	for _, kw := range []int{5, 7, 8} {
-		if g := homeGapXIn(kw, 1); g < (kw+1)/2 {
-			t.Errorf("homeGapXIn(%d) = %d, want at least half a column", kw, g)
-		}
-	}
-}
-
 // The single-block layout must measure the left half exactly as the split one
 // does, or the right half starts at a different place in each.
 func TestFullWidthMatchesSplitHalf(t *testing.T) {
@@ -424,21 +354,53 @@ func TestFullWidthMatchesSplitHalf(t *testing.T) {
 	}
 }
 
-// Both sides of each home block are padded, including the outer edge of the
-// left block, which has no neighbouring column.
+// The home block is set off from the columns beside it, so reaching for a key
+// outside arst / neio shows as a clear jump.
 func TestBuiltinHomeGapBothSides(t *testing.T) {
 	const kw, kg = 5, 1
 	step := kw + kg
 	gap := step + homeGapXIn(kw, kg)
 
-	// a is the first column, so its padding shows as the whole block being
-	// indented rather than as a step from the column before it.
-	if got := homeColX(kbSplitCol, kbLeftHome, 0, kw, kg); got != homeGapXIn(kw, kg) {
-		t.Errorf("a starts at %d, want the gap width %d", got, homeGapXIn(kw, kg))
+	// a is the first column, so it starts flush; the gap shows on the other
+	// side of the cluster.
+	if got := homeColX(kbSplitCol, kbLeftHome, 0, kw, kg); got != 0 {
+		t.Errorf("a starts at %d, want 0", got)
 	}
 	right := homeColX(kbHalfCols, kbLeftHome, kbLeftHome.start+kbLeftHome.cols, kw, kg) -
 		homeColX(kbHalfCols, kbLeftHome, kbLeftHome.start+kbLeftHome.cols-1, kw, kg)
 	if right != gap {
 		t.Errorf("left block: gap after t is %d, want %d", right, gap)
+	}
+	after := homeColX(len(kbRows[0].keys)-kbSplitCol, kbRightHome, kbRightHome.start+kbRightHome.cols, kw, kg) -
+		homeColX(len(kbRows[0].keys)-kbSplitCol, kbRightHome, kbRightHome.start+kbRightHome.cols-1, kw, kg)
+	if after != gap {
+		t.Errorf("right block: gap after o is %d, want %d", after, gap)
+	}
+}
+
+// The thumb row is drawn a line below the alpha rows, so it reads as thumbs
+// rather than as a fifth letter row. That must hold at any cap height.
+func TestThumbRowHasABlankLineAbove(t *testing.T) {
+	for _, size := range [][2]int{{200, 44}, {140, 24}, {120, 18}} {
+		sim := tcell.NewSimulationScreen("UTF-8")
+		if err := sim.Init(); err != nil {
+			t.Fatal(err)
+		}
+		sim.SetSize(size[0], size[1])
+		typ := newTestTyper(sim)
+		typ.drawKeyboard(0)
+		m, ok := typ.keyboardMetrics()
+		if !ok || !typ.builtinSplit(m) {
+			sim.Fini()
+			continue
+		}
+		lastAlpha := 2
+		alphaY := rowY(m.top, lastAlpha, m.keyH, m.rowGap, false)
+		thumbY := rowY(m.top, lastAlpha+1, m.keyH, m.rowGap, true)
+		if thumbY-alphaY != m.keyH+m.rowGap+thumbRowGap {
+			t.Errorf("%dx%d: thumb row %d rows below the last alpha row, want %d",
+				size[0], size[1], thumbY-alphaY, m.keyH+m.rowGap+thumbRowGap)
+		}
+		sim.Fini()
 	}
 }

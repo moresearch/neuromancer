@@ -57,6 +57,37 @@ type vilKeyboard struct {
 	homeKeys  map[[2]int]bool
 	homeLeft  []homePos
 	homeRight []homePos
+
+	// thumbX holds the laid-out thumb columns of each thumb row, tucked
+	// against the inner edge of its half and evenly spaced, so they never
+	// inherit an alpha row's home gap.
+	thumbX map[int][]clusterKey
+
+	// peripheralCols is the set of matrix columns holding only the edge
+	// macro/function keys (the outer column on each side), and peripheralRows
+	// the top function row of each half. They are drawn with a small gap from
+	// the central typing block so the keys in active use stand apart.
+	peripheralCols map[int]bool
+	peripheralRows map[int]bool
+
+	// hasBoard reports whether a row-split matrix is drawn as the board (one
+	// drawn row per matrix row). boardHalfCols is the columns per half.
+	hasBoard      bool
+	boardHalfCols int
+	// boardRowOf maps each drawn row to the matrix row it shows; the thumb
+	// row's entry is -1.
+	boardRowOf []int
+
+	// pressedAt reports whether a physical matrix cell is held, set for the
+	// duration of a draw so a key with no action still lights when pressed.
+	pressedAt func(row, col int) bool
+}
+
+// clusterKey is the x offset of one key in a row laid out on its own, in
+// columns from the start of its half.
+type clusterKey struct {
+	col int
+	x   int
 }
 
 type homePos struct {
@@ -82,11 +113,6 @@ type vilKeyRef struct {
 	row, col int
 	action   vilAction
 }
-
-const (
-	vilBottomPad   = 3
-	vilMinTextRows = 4
-)
 
 var vilCharMap = map[string]rune{
 	"SPC": ' ', "SPACE": ' ',
@@ -206,6 +232,8 @@ func loadVil(path, layerNames string) (*vilKeyboard, error) {
 	}
 	kb.findHomeKeys()
 	kb.findThumbHomes()
+	kb.placeOnBoard()
+	kb.buildPeripheral()
 
 	return kb, nil
 }
@@ -466,45 +494,6 @@ func isHomeDistance(halfCols, d int) bool {
 	return d >= 1 && d <= 4
 }
 
-// thumbColX is colX for a key on a thumb row. Thumb keys do not follow the
-// home-column gap of the alpha rows: they keep the layout's own columns, laid
-// out from the start of their half, so a split keyboard's thumb clusters stay
-// where the keymap puts them (flush with the inner edge of each half).
-// thumbColX returns the x offset of a thumb key relative to the origin of the
-// half it is drawn in. Thumbs are a cluster of their own: an evenly spaced run
-// laid out from the half's inner edge, so the alpha rows' column separators
-// never fall between them and they line up with the inner columns.
-func (kb *vilKeyboard) thumbColX(row, col, keyWidth, keyGap int) int {
-	count := 0
-	for c := 0; c < kb.maxCols; c++ {
-		if kb.cellPresent(row, c) {
-			count++
-		}
-	}
-	if count == 0 {
-		return 0
-	}
-	index := 0
-	for c := 0; c < col; c++ {
-		if kb.cellPresent(row, c) {
-			index++
-		}
-	}
-	// Right-align the cluster inside the half, against its inner edge. A half
-	// narrower than its thumb keys cannot happen on a real board, but clamp
-	// anyway so an offset never lands outside the matrix.
-	halfCols := kb.halfFor(col)
-	half := kb.halfWidthWithGap(halfCols, keyWidth, keyGap)
-	x := half - (count-index)*homeGapStep(keyWidth, keyGap)
-	if x < 0 {
-		return 0
-	}
-	if x+keyWidth > half {
-		return half - keyWidth
-	}
-	return x
-}
-
 // cellPresent reports whether row has a key at col.
 func (kb *vilKeyboard) cellPresent(row, col int) bool {
 	if row < 0 || row >= len(kb.layers[0].matrix) {
@@ -532,8 +521,12 @@ func (kb *vilKeyboard) halfFor(col int) (halfCols int) {
 //
 //	outer | a r s t | rest        inner | n e i o | outer
 //
-// A half which is no wider than the block (plus its outer column) has no gap.
-func vilHomeBlock(halfCols int, right bool) kbHomeBlock {
+// The gap goes on the open sides, between the home keys and the resting outer
+// and stretch index columns. In a matrix split by columns the two halves sit
+// side by side, so the split edge is on the inner side and carries the gap
+// itself. A half which is no wider than the block (plus its outer column) has
+// no gap.
+func vilHomeBlock(halfCols int, right, rowSplit bool) kbHomeBlock {
 	if halfCols <= 4 {
 		return kbHomeBlock{start: 0, cols: halfCols}
 	}
@@ -545,19 +538,32 @@ func vilHomeBlock(halfCols int, right bool) kbHomeBlock {
 	if right {
 		start = 2
 	}
-	return kbHomeBlock{start: start, cols: 4, before: true, after: true}
+	return kbHomeBlock{start: start, cols: 4, before: !rowSplit, after: true}
 }
 
-// homeBlockFor is the home block of the half holding matrix column col. A
-// matrix split by rows puts the right half in its lower rows, so the row
-// decides the side; a matrix split by columns uses the column.
-func (kb *vilKeyboard) homeBlockFor(col int) kbHomeBlock {
-	return vilHomeBlock(kb.halfFor(col), kb.rightHalfAt(0, col))
+// homeBlock is the home block of one half of the matrix.
+func (kb *vilKeyboard) homeBlock(right bool) kbHomeBlock {
+	return vilHomeBlock(kb.maxCols-kb.halfCols, right, kb.halfRows > 0)
 }
 
-// homeBlockAt is homeBlockFor for a key at (row, col).
+// boardHomeBlock is the Sofle board's home block of one half: the four finger
+// columns (a r s t / n e i o), one column in from the outer edge, with the gap
+// on the outer side only so the alphas stay adjacent to their own macro
+// column and the split.
+// boardHomeBlockFor is the home block of a keymap whose home keys follow the
+// alpha columns: the first four columns (a r s t / n e i o), the gap going
+// toward the outer macro column.
+func boardHomeBlockFor(cols int) kbHomeBlock {
+	if cols <= 4 {
+		return kbHomeBlock{start: 0, cols: cols}
+	}
+	return kbHomeBlock{start: 0, cols: 4, after: true}
+}
+
+// homeBlockAt is the home block of the half holding column col. A matrix split
+// by rows puts the right half in its lower rows, so the row decides the side.
 func (kb *vilKeyboard) homeBlockAt(row, col int) kbHomeBlock {
-	return vilHomeBlock(kb.halfFor(col), kb.rightHalfAt(row, col))
+	return kb.homeBlock(kb.rightHalfAt(row, col))
 }
 
 // rightHalfAt reports whether (row, col) is in the right half.
@@ -574,24 +580,279 @@ func (kb *vilKeyboard) rightHalfAt(row, col int) bool {
 // colX returns the x offset of column col relative to the half which contains
 // it, including the home-column gap. Drawing and width both go through it.
 func (kb *vilKeyboard) colX(row, col, keyWidth, keyGap int) int {
-	switch {
-	case kb.splitCols:
-		return homeColX(kb.halfCols, kb.homeBlockAt(row, col), col%kb.halfCols, keyWidth, keyGap)
-	case kb.halfRows > 0:
-		return homeColX(kb.maxCols, kb.homeBlockAt(row, col), col, keyWidth, keyGap)
-	}
-	return col * homeGapStep(keyWidth, keyGap)
+	return kb.colXSide(row, col, false, keyWidth, keyGap)
 }
 
+// colXSide is colX with the side known. A row-split matrix draws each half from
+// its own inner edge, so a column cannot be attributed to a half on its own.
+func (kb *vilKeyboard) colXSide(row, col int, right bool, keyWidth, keyGap int) int {
+	// Keys are packed edge to edge: the board is drawn as one contiguous grid
+	// with no gap between caps and no extra home/peripheral gaps. Only the
+	// split between the two halves keeps a gap.
+	step := keyWidth
+	if kb.hasBoard {
+		if keys, ok := kb.thumbX[row]; ok {
+			maxX := 0
+			for _, k := range keys {
+				if k.x > maxX {
+					maxX = k.x
+				}
+			}
+			for _, k := range keys {
+				if k.col == col {
+					if right {
+						return (maxX - k.x) * step
+					}
+					return k.x * step
+				}
+			}
+			return col * step
+		}
+		return col * step
+	}
+	if keys, ok := kb.thumbX[row]; ok {
+		want := col
+		if kb.splitCols {
+			want = col % kb.halfCols
+		}
+		for _, k := range keys {
+			if k.col == want {
+				return k.x * step
+			}
+		}
+		return col * step
+	}
+	return col * step
+}
+
+// peripheralGapIn is the blank space between the edge macro/function columns
+// (or the top function row) and the central typing block. It is a fraction of
+// a key column, like the home gap, so it stays visible at any cap size.
+func peripheralGapIn(keyWidth, keyGap int) int {
+	gap := homeGapStep(keyWidth, keyGap) / 4
+	if gap < 1 {
+		gap = 1
+	}
+	return keyGap + gap
+}
+
+// buildPeripheral marks the matrix columns and rows that hold only the edge
+// macro/function keys — the outer column on each side and the top function row
+// — so they can be drawn a little apart from the central block the user types
+// on. A column or row is peripheral when none of its base-layer cells produces
+// a typing character (they are modifiers, layer keys, tap-dances or F-keys),
+// so the call is content-driven rather than a fixed column guess.
+func (kb *vilKeyboard) buildPeripheral() {
+	kb.peripheralCols = map[int]bool{}
+	kb.peripheralRows = map[int]bool{}
+	if kb.halfRows <= 0 || kb.maxCols < 5 {
+		return
+	}
+	// A cell is a typing key when it produces a character directly.
+	typing := func(row, col int) bool {
+		if !kb.cellPresent(row, col) {
+			return false
+		}
+		return kb.actionAt(0, row, col).output != 0
+	}
+	// A column is peripheral if no cell in it types a character.
+	for c := 0; c < kb.maxCols; c++ {
+		anyType := false
+		for r := 0; r < len(kb.layers[0].matrix); r++ {
+			if typing(r, c) {
+				anyType = true
+				break
+			}
+		}
+		if !anyType {
+			kb.peripheralCols[c] = true
+		}
+	}
+	// A row is peripheral if no cell in it types a character; only the top row
+	// of each half is considered, so the thumb row is never marked this way.
+	// The top row only stands apart when the drawing shows it apart: a board
+	// whose alphas start below it (a 4-row half with a macro row keeps its
+	// alphas on the board's alpha rows; a 5-row Miryoku half is drawn with no
+	// macro row).
+	if !kb.hasTypingRow(0) && kb.alphasFitBelowTopRow() {
+		kb.peripheralRows[0] = true
+	}
+	if kb.halfRows > 0 && !kb.hasTypingRow(kb.halfRows) && kb.alphasFitBelowTopRow() {
+		kb.peripheralRows[kb.halfRows] = true
+	}
+}
+
+// alphasFitBelowTopRow reports whether the board can keep the keymap's
+// non-typing top row as a macro row above four alpha rows: the keymap then
+// needs five rows above its thumbs, or has blank filler in the top row.
+func (kb *vilKeyboard) alphasFitBelowTopRow() bool {
+	if kb.halfRows <= 0 {
+		return true
+	}
+	alphaRows := kb.halfRows
+	if kb.isThumbRow(kb.halfRows - 1) {
+		alphaRows--
+	}
+	// Four alpha rows plus the macro row need five matrix rows; the thumb
+	// row is one of them, so a half of five rows before the thumbs has it.
+	return alphaRows >= sofleRows
+}
+
+// hasTypingRow reports whether half row r has at least one typing key.
+func (kb *vilKeyboard) hasTypingRow(r int) bool {
+	if r < 0 || r >= len(kb.layers[0].matrix) {
+		return false
+	}
+	for c := 0; c < kb.maxCols; c++ {
+		if kb.cellPresent(r, c) && kb.actionAt(0, r, c).output != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// peripheralRow reports whether display row r is a peripheral (function) row.
+func (kb *vilKeyboard) peripheralRow(r int) bool {
+	return kb.peripheralRows[r]
+}
+
+// isPeripheral reports whether the key at (row, col) is a peripheral key.
+func (kb *vilKeyboard) isPeripheral(row, col int) bool {
+	if kb.peripheralRows[row] {
+		return true
+	}
+	return kb.peripheralCols[col]
+}
+
+// Sofle-shaped board frame. The board keeps this shape whatever the .vil
+// contains: six columns per hand, four rows, five thumb keys, and a knob at
+// each hand's top-outer corner. A 5-column keymap (Miryoku's 36 keys with the
+// macro column) is placed on the inner five columns, a full 6-column Sofle
+// keymap keeps its outer macro column. A half of five rows gets a blank knob
+// row at the top; four alpha rows follow, then the two thumb rows.
+const (
+	sofleCols       = 6
+	sofleRows       = 4 // alpha rows
+	sofleThumbs     = 5
+	boardKnobMarker = '⌾'
+)
+
+// placeOnBoard places the matrix's rows on the board's drawn rows, one for
+// one: a row-split matrix draws both halves row by row, so row r of the board
+// is row r of the matrix on both halves (the right half reads its own rows,
+// halfRows later). Only a column-split matrix goes unplaced: it already draws
+// its halves from its own columns.
+func (kb *vilKeyboard) placeOnBoard() {
+	kb.hasBoard = false
+	kb.boardHalfCols = 0
+	kb.thumbX = map[int][]clusterKey{}
+	if kb.halfRows <= 0 {
+		kb.buildThumbRows()
+		return
+	}
+	kb.hasBoard = true
+	kb.boardHalfCols = kb.maxCols
+	kb.buildThumbRows()
+}
+
+// buildThumbRows lays out each thumb row's keys as a cluster per half:
+// evenly spaced, right-aligned to the half's last column so the cluster sits
+// against its inner edge, with the same gaps as the alpha rows.
+func (kb *vilKeyboard) buildThumbRows() {
+	kb.thumbX = map[int][]clusterKey{}
+	for r := range kb.layers[0].matrix {
+		if !kb.isThumbRow(r) {
+			continue
+		}
+		if kb.splitCols {
+			kb.layoutThumbHalf(r, 0, kb.halfCols)
+			kb.layoutThumbHalf(r, kb.halfCols, kb.maxCols)
+			continue
+		}
+		kb.layoutThumbHalf(r, 0, kb.maxCols)
+	}
+}
+
+// layoutThumbHalf records the thumb keys of row r between start and end.
+func (kb *vilKeyboard) layoutThumbHalf(row, start, end int) {
+	if end > len(kb.layers[0].matrix[row]) {
+		end = len(kb.layers[0].matrix[row])
+	}
+	ref := kb.maxCols
+	if kb.splitCols {
+		ref = kb.halfCols
+	}
+	if kb.hasBoard {
+		// The board draws every column of the half (seven on the Miryoku);
+		// the thumb cluster starts at the inner column beside the split.
+		ref = kb.boardHalfCols
+	}
+	count := 0
+	for c := start; c < end; c++ {
+		if kb.cellPresent(row, c) {
+			count++
+		}
+	}
+	// x counts from the half's origin in the drawn board: the keys hug the
+	// inner edge first, then extend outward, as on the real board. The board is
+	// drawn mirrored, so this x is for the left half; colXSide flips it for the
+	// right half.
+	inner := ref
+	idx := 0
+	for c := start; c < end; c++ {
+		if !kb.cellPresent(row, c) {
+			continue
+		}
+		x := inner - (count - idx)
+		if x < 0 {
+			x = 0
+		}
+		kb.thumbX[row] = append(kb.thumbX[row], clusterKey{col: c, x: x})
+		idx++
+	}
+}
+
+// halfWidth is the laid-out width of one half of a row-split matrix. It counts
+// the home gap, the peripheral column gaps, and the right half's extra inner
+// column, all through the same colXSide used for drawing.
+func (kb *vilKeyboard) halfWidth(right bool, keyWidth, keyGap int) int {
+	halfCols := kb.maxCols
+	if kb.hasBoard {
+		halfCols = kb.boardHalfCols
+	} else if kb.halfRows > 0 {
+		halfCols = kb.maxCols - kb.halfCols
+	}
+	if halfCols <= 0 {
+		return 0
+	}
+	// The width is the x of the column one past the end, minus the trailing
+	// key gap, so it covers every key plus its peripheral gaps.
+	return kb.colXSide(0, halfCols, right, keyWidth, keyGap) - keyGap
+}
+
+// halfWidthWithGap is halfWidth for a matrix independent half of halfCols
+// columns, left-sided.
 func (kb *vilKeyboard) halfWidthWithGap(halfCols, keyWidth, keyGap int) int {
 	if halfCols <= 0 {
 		return 0
 	}
-	return lenWithGap(halfCols, vilHomeBlock(halfCols, false), keyWidth, keyGap)
+	// Contiguous grid: halfCols caps edge to edge, no gaps.
+	return halfCols * keyWidth
 }
 
 func (kb *vilKeyboard) targetHome(row, col int) (int, int, bool) {
 	if kb.isThumbRow(row) {
+		if kb.hasBoard {
+			// The resting thumb is the keymap's thumb home, on its drawn
+			// thumb key.
+			if kb.thumbLeftOK {
+				return row, kb.thumbLeftCol, true
+			}
+			if kb.thumbRightOK {
+				return row, kb.thumbRightCol, true
+			}
+			return row, 2, true
+		}
 		if kb.halfRows >= 4 {
 			if kb.thumbLeftOK && row == kb.thumbLeftRow {
 				return kb.thumbLeftRow, kb.thumbLeftCol, true
@@ -649,6 +910,12 @@ func (kb *vilKeyboard) targetHome(row, col int) (int, int, bool) {
 }
 
 func (kb *vilKeyboard) isHomeKey(row, col int) bool {
+	if kb.hasBoard {
+		// The resting keys follow the keymap's own home row, wherever the
+		// placement put it on the board.
+		block := boardHomeBlockFor(kb.maxCols)
+		return row == kb.homeRow && col >= block.start && col < block.start+block.cols
+	}
 	if kb.homeKeys[[2]int{row, col}] {
 		return true
 	}
@@ -686,13 +953,53 @@ func (kb *vilKeyboard) isHomeKey(row, col int) bool {
 // thumbRowAt reports whether matrix row row is the thumb row, which is drawn a
 // line below the alpha rows so the thumbs read as a separate cluster.
 func (kb *vilKeyboard) thumbRowAt(row int) bool {
+	if kb.hasBoard {
+		return row == sofleRows
+	}
+	if kb.halfRows > 0 {
+		// Only the row holding the thumbs is the thumb row. A Sofle matrix
+		// carries five thumb rows per half (knob row included); the cluster
+		// is a single drawn row.
+		first := kb.halfRows - 1
+		if kb.thumbLeftOK {
+			first = kb.thumbLeftRow
+		}
+		return row == first
+	}
 	if row < 0 || row != kb.displayRows()-1 {
 		return false
 	}
-	return kb.isThumbRow(row)
+	if kb.halfRows > 0 {
+		// A row with no keys (a half's thumb row when the keymap leaves it
+		// empty) is not drawn as a thumb row at all.
+		return kb.rowHasKeys(row) || kb.rowHasKeys(row+kb.halfRows)
+	}
+	return kb.rowHasKeys(row)
+}
+
+// rowHasKeys reports whether row has a key in either half it is drawn in.
+func (kb *vilKeyboard) rowHasKeys(row int) bool {
+	if row < 0 || row >= len(kb.layers[0].matrix) {
+		return false
+	}
+	end := kb.maxCols
+	if kb.splitCols {
+		end = kb.halfCols
+	}
+	for _, r := range kb.layers[0].matrix[row][:minInt(end, len(kb.layers[0].matrix[row]))] {
+		if r != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (kb *vilKeyboard) isThumbRow(row int) bool {
+	if kb.hasBoard {
+		// Each half has its own thumb row: the left at sofleRows, the right
+		// halfRows below it.
+		return row == sofleRows || (kb.halfRows > 0 && row == sofleRows+kb.halfRows)
+	}
 	if kb.halfRows > 0 {
 		if kb.halfRows < 4 {
 			return false
@@ -780,15 +1087,30 @@ type tapDance struct {
 func parseVilTapDances(raw []interface{}) []tapDance {
 	out := make([]tapDance, len(raw))
 	for i, td := range raw {
+		cell := func(s string) string { return strings.TrimSpace(s) }
 		switch x := td.(type) {
 		case string:
-			out[i].tap = strings.TrimSpace(x)
+			out[i].tap = cell(x)
 		case map[string]interface{}:
 			if tap, ok := x["tap"].(string); ok {
-				out[i].tap = strings.TrimSpace(tap)
+				out[i].tap = cell(tap)
 			}
 			if hold, ok := x["hold"].(string); ok {
-				out[i].hold = strings.TrimSpace(hold)
+				out[i].hold = cell(hold)
+			}
+		case []interface{}:
+			// Vial writes a tap-dance as a five-element array:
+			//   [tap, hold, double-tap, double-tap-hold, tapping-term]
+			// The hold is only meaningful when it is not KC_NO.
+			if len(x) >= 1 {
+				if s, ok := x[0].(string); ok {
+					out[i].tap = cell(s)
+				}
+			}
+			if len(x) >= 2 {
+				if s, ok := x[1].(string); ok && s != "KC_NO" {
+					out[i].hold = cell(s)
+				}
 			}
 		}
 	}
@@ -1324,12 +1646,10 @@ func (kb *vilKeyboard) actionAt(layer, row, col int) vilAction {
 	}
 
 	for l := layer; l >= 0; l-- {
-		lay := kb.layers[l]
-		if row < 0 || row >= len(lay.actions) || col < 0 || col >= len(lay.actions[row]) {
+		a, ok := kb.matrixAction(l, row, col)
+		if !ok {
 			return vilAction{none: true}
 		}
-
-		a := lay.actions[row][col]
 		if a.transparent {
 			continue
 		}
@@ -1490,42 +1810,62 @@ func (kb *vilKeyboard) displayRows() int {
 	if kb.splitCols {
 		return rows
 	}
+	if kb.hasBoard {
+		// Four alpha rows and the thumb row.
+		return sofleRows + 1
+	}
 	if kb.halfRows > 0 {
 		return kb.halfRows
 	}
 	return rows
 }
 
-func (kb *vilKeyboard) halfWidth(keyWidth, keyGap int) int {
-	if kb.maxCols == 0 {
-		return 0
+// boardRow is the drawn board row of display row r, or -1 when r is the thumb
+// row or there is no placed board.
+func (kb *vilKeyboard) boardRow(r int) int {
+	if !kb.hasBoard || r < 0 || r >= sofleRows {
+		return -1
 	}
-	return kb.maxCols*keyWidth + (kb.maxCols-1)*keyGap
+	return r
 }
 
 func (kb *vilKeyboard) width(keyWidth, keyGap, splitGap int) int {
+	if kb.hasBoard {
+		return kb.halfWidth(false, keyWidth, keyGap) + splitGap + kb.halfWidth(true, keyWidth, keyGap)
+	}
 	if kb.splitCols {
 		leftWidth := kb.halfWidthWithGap(kb.halfCols, keyWidth, keyGap)
 		rightWidth := kb.halfWidthWithGap(kb.maxCols-kb.halfCols, keyWidth, keyGap)
 		return leftWidth + splitGap + rightWidth
 	}
-
-	half := kb.halfWidthWithGap(kb.maxCols, keyWidth, keyGap)
-	if half == 0 {
-		half = kb.halfWidth(keyWidth, keyGap)
-	}
 	if kb.halfRows > 0 {
-		return 2*half + splitGap
+		return kb.halfWidth(false, keyWidth, keyGap) + splitGap + kb.halfWidth(true, keyWidth, keyGap)
 	}
-	return half
+	if w := kb.halfWidth(false, keyWidth, keyGap); w > 0 {
+		return w
+	}
+	if kb.maxCols == 0 {
+		return 0
+	}
+	// A half too narrow for the home block falls back to plain columns.
+	return kb.maxCols*keyWidth + (kb.maxCols-1)*keyGap
 }
 
 // vilKeyGap is the gap between Vial caps. The board is otherwise packed, so
 // this is the minimum that keeps neighbouring caps apart.
 const vilKeyGap = 1
 
+// vilMaxKeyWidth bounds how wide a cap grows: past five cells a key reads as
+// a square block rather than a keycap on a board.
+const vilMaxKeyWidth = 5
+
 func (kb *vilKeyboard) widestKey(screenWidth, keyGap, splitGap int) int {
-	for kw := 8; kw >= 1; kw-- {
+	// A keyboard reads as a keyboard, not as a row of square blocks: caps
+	// stay inside this band even when the window could fit wider ones. A
+	// closed two-row cap has three cells of label room, so a cap of three
+	// cells is tried before one of two (two is only for windows that cannot
+	// hold three).
+	for _, kw := range capLadder() {
 		if w := kb.width(kw, keyGap, splitGap); w > 0 && w+2 <= screenWidth {
 			return kw
 		}
@@ -1533,28 +1873,90 @@ func (kb *vilKeyboard) widestKey(screenWidth, keyGap, splitGap int) int {
 	return 0
 }
 
-func (kb *vilKeyboard) metrics(screenWidth, screenHeight, splitGap int) (kbMetrics, bool) {
+// capLadder is the cap widths tried, widest first: 5, 4 and 3, then the
+// narrower 2 and 1 that only an otherwise-too-narrow window needs.
+func capLadder() []int {
+	return []int{vilMaxKeyWidth, 4, 3, 2, 1}
+}
+
+// peripheralRowGap is the blank line between the top function row and the
+// first alpha row, so the unused F-row reads as separate from the typing block.
+const peripheralRowGap = 1
+
+// vilRowY returns the top of display row r, pushing the peripheral function
+// row apart from the alpha rows and the thumb row below them.
+func (kb *vilKeyboard) vilRowY(top, r, keyH, rowGap int) int {
+	y := top + r*(keyH+rowGap)
+	if !kb.hasBoard {
+		// The function row (row 0 of each half) is separated from the alpha
+		// rows.
+		if kb.peripheralRows[0] && r >= 1 {
+			y += peripheralRowGap
+		}
+		if kb.peripheralRows[kb.halfRows] && r >= kb.halfRows+1 {
+			y += peripheralRowGap
+		}
+	}
+	if kb.thumbRowAt(r) {
+		y += thumbRowGap
+	}
+	return y
+}
+
+// vilGridHeight is the total height of the drawn matrix, counting the
+// peripheral-row and thumb-row gaps.
+func (kb *vilKeyboard) vilGridHeight(rows, keyH, rowGap int) int {
+	if rows <= 0 {
+		return 0
+	}
+	h := rows*keyH + (rows-1)*rowGap
+	if kb.thumbRowAt(rows - 1) {
+		h += thumbRowGap
+	}
+	if kb.hasBoard {
+		// The placed board has no separate function row: the macro row is
+		// part of the grid, as on the board itself.
+		return h
+	}
+	// The function row of each half adds a blank line above the alpha rows.
+	n := 0
+	if kb.peripheralRows[0] && rows > 1 {
+		n++
+	}
+	if kb.peripheralRows[kb.halfRows] && rows > kb.halfRows+1 {
+		n++
+	}
+	h += n * peripheralRowGap
+	return h
+}
+
+// bareRows is the thinnest the matrix draws: one-row caps, no row gaps, with
+// the peripheral and thumb gaps kept.
+func (kb *vilKeyboard) bareRows() int {
+	rows := kb.displayRows()
+	if rows == 0 {
+		return builtinBareRows()
+	}
+	return kb.vilGridHeight(rows, 1, 0)
+}
+
+func (kb *vilKeyboard) metrics(screenWidth, availHeight, splitGap int) (kbMetrics, bool) {
 	rows := kb.displayRows()
 	if rows == 0 {
 		return kbMetrics{}, false
 	}
 
-	// Keys are packed tight, but they still need a gap between the caps, so the
-	// cap size is chosen with that gap already included: choosing against a
-	// zero gap and then adding one overflows the terminal.
-	keyGap := vilKeyGap
+	// Keys are packed edge to edge with no gap between caps; the split gap is
+	// the only separation.
+	keyGap := 0
 	keyWidth := kb.widestKey(screenWidth, keyGap, splitGap)
 	if keyWidth == 0 {
 		return kbMetrics{}, false
 	}
 
-	keyH, rowGap := chooseKeyMetrics(rows, screenHeight, vilBottomPad, vilMinTextRows)
-	keyArea := gridHeight(rows, keyH, rowGap, true)
-	height := keyArea + 1 + vilBottomPad
-	top := screenHeight - height
-	if top < 2 {
-		return kbMetrics{}, false
-	}
+	keyH, rowGap := chooseKeyMetrics(rows, availHeight, func(kh, rg int) int {
+		return kb.vilGridHeight(rows, kh, rg)
+	})
 
 	return kbMetrics{
 		keyWidth: keyWidth,
@@ -1562,8 +1964,7 @@ func (kb *vilKeyboard) metrics(screenWidth, screenHeight, splitGap int) (kbMetri
 		splitGap: splitGap,
 		keyH:     keyH,
 		rowGap:   rowGap,
-		top:      top,
-		height:   height,
+		height:   kb.vilGridHeight(rows, keyH, rowGap) + boardPad,
 	}, true
 }
 
@@ -1793,17 +2194,63 @@ func (kb *vilKeyboard) layerHintText(prefix string, layer int, h vilHint, found 
 }
 
 // hintForLayer returns guidance for target while the given layer is shown as
-// held or previewed. The layer activator is omitted when that layer is already
-// active, and targets that are not on the layout are reported explicitly.
+// held or previewed. It finds the target on that layer (resolving transparency
+// down to the base layer), so the hint names the key to press on the held layer
+// rather than the base layer's key; targets that are not on the layout are
+// reported explicitly.
 func (kb *vilKeyboard) hintForLayer(status string, layer int, target rune) string {
-	h, found := kb.findRune(target)
-	hint := kb.layerHintText(status, layer, h, found)
+	h, found := kb.findOnActiveLayer(target, layer)
+	statusText := status + ": " + kb.hintLayerName(layer)
 	if !found {
 		if missing := noKeyHint(target); missing != "" {
-			hint += " — " + missing
+			return statusText + " — " + missing
+		}
+		return statusText
+	}
+	key := h.action.label
+	if h.action.output != 0 && h.action.layerMode != "" {
+		key = vilCharLabel(h.action.output)
+	}
+	if key == "" {
+		return statusText + " — press " + h.action.display
+	}
+	if h.shift {
+		shiftLabel := "SFT"
+		if h.shiftRow >= 0 {
+			if a := kb.actionAt(layer, h.shiftRow, h.shiftCol); a.label != "" {
+				shiftLabel = a.label
+			}
+		}
+		return fmt.Sprintf("%s — hold %s (shift) + press %s", statusText, shiftLabel, key)
+	}
+	return fmt.Sprintf("%s — press %s", statusText, key)
+}
+
+// findOnActiveLayer finds target on the given layer, resolving transparent
+// cells down to the base layer, and reports the (row, col) and resolved action
+// plus whether a shift is needed.
+func (kb *vilKeyboard) findOnActiveLayer(target rune, layer int) (vilHint, bool) {
+	if layer < 0 {
+		layer = 0
+	}
+	if layer >= len(kb.layers) {
+		layer = len(kb.layers) - 1
+	}
+	for row := range kb.layers[layer].matrix {
+		for col := range kb.layers[layer].matrix[row] {
+			a := kb.actionAt(layer, row, col)
+			shift := false
+			switch {
+			case a.output != 0 && a.output == target:
+			case a.shifted != 0 && a.shifted == target:
+				shift = true
+			default:
+				continue
+			}
+			return vilHint{row: row, col: col, action: a, layer: layer, shift: shift}, true
 		}
 	}
-	return hint
+	return vilHint{}, false
 }
 
 // noKeyHint explains why a target has no guidance in this layout.
@@ -1843,6 +2290,12 @@ func (t *typer) drawVilKeyboard(target rune) {
 	m, ok := t.keyboardMetrics()
 	if !ok {
 		return
+	}
+
+	// Let the draw light a physical key that is held, even with no action.
+	kb.pressedAt = nil
+	if t.layerTracker != nil {
+		kb.pressedAt = t.layerTracker.Pressed
 	}
 
 	hint, found := kb.findRune(target)
@@ -1898,15 +2351,6 @@ func (t *typer) drawVilKeyboard(target rune) {
 	x0 := (sw - width) / 2
 	rows := kb.displayRows()
 
-	// Clear the whole matrix before drawing. Layers can differ in which cells
-	// are absent, and a cell that is empty in the new layer must not keep the
-	// old layer's label.
-	for y := m.top; y < m.top+gridHeight(rows, m.keyH, m.rowGap, true); y++ {
-		for x := x0; x < x0+width; x++ {
-			t.Scr.SetContent(x, y, ' ', nil, t.defaultStyle)
-		}
-	}
-
 	wrongRow, wrongCol := -1, -1
 	if t.wrongKeyValid() {
 		if ref, ok := kb.findOnLayer(t.wrongKey, layer); ok {
@@ -1914,30 +2358,67 @@ func (t *typer) drawVilKeyboard(target rune) {
 		}
 	}
 
+	if t.compactBoard(m) {
+		// A one-row cap is drawn as a single-line key, so a window that only
+		// fits flat caps still shows the board through the compact path.
+		t.drawCompactBoard(kb, layer, m, hint, found, showTarget, wrongRow, wrongCol, focusLeft, focusRight, preview || physical)
+		return
+	}
+
+	// Clear the whole matrix before drawing. Layers can differ in which cells
+	// are absent, and a cell that is empty in the new layer must not keep the
+	// old layer's label.
+	for y := m.top; y < m.top+kb.vilGridHeight(rows, m.keyH, m.rowGap); y++ {
+		for x := x0; x < x0+width; x++ {
+			t.Scr.SetContent(x, y, ' ', nil, t.defaultStyle)
+		}
+	}
+
 	rawLayer := physical || preview
 	for r := 0; r < rows; r++ {
-		y := rowY(m.top, r, m.keyH, m.rowGap, kb.thumbRowAt(r))
+		if kb.thumbRowAt(r) {
+			t.drawVilThumbs(kb, layer, r, x0, m, hint, showTarget, wrongRow, wrongCol, focusLeft, focusRight, rawLayer)
+			continue
+		}
+		y := kb.vilRowY(m.top, r, m.keyH, m.rowGap)
+
+		if kb.hasBoard {
+			leftWidth := kb.halfWidth(false, m.keyWidth, m.keyGap)
+			kb.drawBoardRow(t.Scr, layer, r, false, x0,
+				y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
+			// A row-split matrix keeps the right half's rows halfRows below
+			// the left's, so the right half reads its own keys, not a copy.
+			rightRow := r + kb.halfRows
+			if rightRow >= len(kb.layers[0].matrix) {
+				rightRow = r
+			}
+			kb.drawBoardRow(t.Scr, layer, rightRow, true, x0+leftWidth+m.splitGap,
+				y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
+			continue
+		}
 
 		switch {
 		case kb.splitCols:
 			leftWidth := kb.halfWidthWithGap(kb.halfCols, m.keyWidth, m.keyGap)
-			kb.drawCols(t.Scr, layer, r, 0, kb.halfCols, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
+			kb.drawCols(t.Scr, layer, r, 0, kb.halfCols, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, false, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 			kb.drawCols(t.Scr, layer, r, kb.halfCols, kb.maxCols,
-				x0+leftWidth+m.splitGap, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
+				x0+leftWidth+m.splitGap, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, true, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 		case kb.halfRows > 0:
-			leftWidth := kb.halfWidthWithGap(kb.maxCols, m.keyWidth, m.keyGap)
-			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
+			leftWidth := kb.halfWidth(false, m.keyWidth, m.keyGap)
+			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, false, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 			if r+kb.halfRows < len(kb.layers[0].matrix) {
 				kb.drawHalf(t.Scr, layer, r+kb.halfRows,
 					x0+leftWidth+m.splitGap,
-					y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
+					y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, true, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 			}
 		default:
-			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, true, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
+			kb.drawHalf(t.Scr, layer, r, x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, true, false, activeCol, t.blinkOn, rawLayer, t.defaultStyle)
 		}
 	}
 
-	hintY := m.top + gridHeight(rows, m.keyH, m.rowGap, true)
+	// The thumb row is drawn a line below the last alpha row, so the hint
+	// follows it.
+	hintY := m.top + kb.vilGridHeight(rows, m.keyH, m.rowGap)
 	hintText := kb.hintText(hint, found)
 	switch {
 	case preview:
@@ -1955,26 +2436,187 @@ func (t *typer) drawVilKeyboard(target rune) {
 	}
 }
 
-func (kb *vilKeyboard) drawHalf(scr tcell.Screen, layer, matrixRow, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused bool, activeCol int, blink bool, raw bool, def tcell.Style) {
-	if layer < 0 || layer >= len(kb.layers) {
-		return
+// compactBoard reports whether the window is too narrow for the board's
+// closed caps: the two halves are then drawn as single-line keys, which take
+// three cells per column instead of four.
+func (t *typer) compactBoard(m kbMetrics) bool {
+	if t.vil == nil || !t.vil.hasBoard {
+		return false
 	}
-	if matrixRow < 0 || matrixRow >= len(kb.layers[layer].matrix) {
-		return
-	}
-
-	kb.drawCols(scr, layer, matrixRow, 0, len(kb.layers[layer].matrix[matrixRow]),
-		x, y, keyWidth, keyGap, keyH, hint, found, wrongRow, wrongCol, focused, activeCol, blink, raw, def)
+	return m.keyH < 2
 }
 
-func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, endCol, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused bool, activeCol int, blink bool, raw bool, def tcell.Style) {
+// compactCols is the drawn columns per half of the compact board: every
+// column of the half (seven on the Miryoku), or the matrix's own width.
+func (kb *vilKeyboard) compactCols() int {
+	cols := kb.maxCols
+	if kb.hasBoard && kb.boardHalfCols > 0 {
+		cols = kb.boardHalfCols
+	}
+	if cols < 1 {
+		cols = 1
+	}
+	return cols
+}
+
+// compactLabel is the label of a compact cap: the tap character, with the home
+// row modifier's tag first when the cap is wide enough for both. It is never
+// empty for a wired key.
+func compactLabel(a vilAction, width int) string {
+	label := a.label
+	if a.display != "" && a.mods == "" {
+		label = a.display
+	}
+	if a.transparent && label == "" {
+		label = "▽"
+	}
+	if label == "" {
+		label = "?"
+	}
+	// A home row modifier's tag tells the resting finger's chord, so it wins
+	// over a letter the user already knows by position.
+	if tag := hrmTag(a.mods); tag != "" && width >= 2 {
+		label = tag
+	}
+	if len([]rune(label)) > width {
+		label = buttonLabel(label, width)
+	}
+	return label
+}
+
+// drawCompactBoard draws the whole board as single-line keys on the board's
+// own rows: both hands side by side with the joiner between them.
+func (t *typer) drawCompactBoard(kb *vilKeyboard, layer int, m kbMetrics, hint vilHint, found, showTarget bool, wrongRow, wrongCol int, focusLeft, focusRight, raw bool) {
+	sw, _ := t.Scr.Size()
+	cols := kb.compactCols()
+	// Each key is three cells; a blank cell keeps the columns apart. The
+	// halves share the cap size the row height allows.
+	keyW := 3
+	keyGap := 1
+	halfW := cols*keyW + (cols-1)*keyGap
+	splitGap := m.splitGap
+	if splitGap < 1 {
+		splitGap = 1
+	}
+	width := 2*halfW + splitGap
+	x0 := (sw - width) / 2
+	if x0 < 0 {
+		x0 = 0
+	}
+	rows := kb.displayRows()
+
+	// Clear the board's own block first: a shorter row must not keep the
+	// previous frame's cells.
+	for r := 0; r < rows; r++ {
+		y := kb.vilRowY(m.top, r, 1, 0)
+		if y < 0 || y >= m.top+m.height {
+			continue
+		}
+		for x := x0; x < x0+width && x < sw; x++ {
+			t.Scr.SetContent(x, y, ' ', nil, t.defaultStyle)
+		}
+	}
+
+	activeCol := -1
+	if found && !kb.isThumbRow(hint.row) {
+		if _, c, ok := kb.targetHome(hint.row, hint.col); ok {
+			activeCol = c
+		}
+	}
+
+	put := func(r, col int, right, focus bool) {
+		if r < 0 || r > rows || r >= len(kb.layers[0].matrix) {
+			return
+		}
+		row := kb.layers[0].matrix[r]
+		var a vilAction
+		if raw {
+			a = kb.layers[0].actions[r][col]
+		} else {
+			a = kb.actionAt(layer, r, col)
+		}
+		present := col < len(row) && row[col] != "" && !(a.none && !strings.HasPrefix(a.raw, "TD("))
+		x := x0 + col*(keyW+keyGap)
+		if right {
+			x = x0 + halfW + splitGap + col*(keyW+keyGap)
+		}
+		y := kb.vilRowY(m.top, r, 1, 0)
+		if y < 0 || y >= m.top+m.height {
+			// Past the rows the keys part has: the key is not on screen.
+			return
+		}
+		if !present {
+			if kb.thumbRowAt(r) {
+				// Thumb rows draw only real cluster keys; empty slots are not
+				// physical keys.
+				return
+			}
+			// Unused physical position: an empty cell, lit while held.
+			style := t.defaultStyle.Dim(true)
+			if kb.pressedAt != nil && kb.pressedAt(r, col) {
+				style = kbModStyle
+			}
+			drawString(t.Scr, x, y, strings.Repeat(" ", keyW), -1, style)
+			return
+		}
+		style := t.defaultStyle
+		switch {
+		case kb.pressedAt != nil && kb.pressedAt(r, col):
+			style = kbModStyle
+		case r == wrongRow && col == wrongCol:
+			style = kbErrorStyle
+		case found && showTarget && r == hint.row && col == hint.col:
+			style = targetStyle(t.blinkOn, t.defaultStyle)
+		case found && hint.activator != nil && r == hint.activator.row && col == hint.activator.col:
+			style = kbModStyle
+		case found && hint.shift && r == hint.shiftRow && col == hint.shiftCol:
+			style = kbModStyle
+		case kb.isHomeKey(r, col):
+			if col == activeCol {
+				style = t.defaultStyle.Foreground(tcell.ColorGreen).Bold(true)
+			} else {
+				style = t.defaultStyle.Foreground(tcell.ColorGreen)
+			}
+		}
+		if !focus {
+			style = style.Dim(true)
+		}
+		drawString(t.Scr, x, y, compactLabel(a, keyW), -1, style)
+	}
+
+	for r := 0; r < rows; r++ {
+		if kb.thumbRowAt(r) {
+			// The thumbs are one keymap row per half; draw each half's own.
+			for c := 0; c < cols; c++ {
+				put(r, c, false, focusLeft)
+				put(r+kb.halfRows, c, true, focusRight)
+			}
+			continue
+		}
+		for c := 0; c < cols; c++ {
+			put(r, c, false, focusLeft)
+			put(r+kb.halfRows, c, true, focusRight)
+		}
+	}
+}
+
+func (kb *vilKeyboard) drawHalf(scr tcell.Screen, layer, matrixRow, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused, right bool, activeCol int, blink bool, raw bool, def tcell.Style) {
+	if matrixRow >= len(kb.layers[0].matrix) {
+		return
+	}
+	kb.drawCols(scr, layer, matrixRow, 0, kb.maxCols,
+		x, y, keyWidth, keyGap, keyH, hint, found, wrongRow, wrongCol, focused, right, activeCol, blink, raw, def)
+}
+
+func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, endCol, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused, right bool, activeCol int, blink bool, raw bool, def tcell.Style) {
 	if layer < 0 || layer >= len(kb.layers) {
 		return
 	}
 	if matrixRow < 0 || matrixRow >= len(kb.layers[layer].matrix) {
 		return
 	}
-
+	// Read the keymap's own labels; the board is drawn by placing keys at
+	// their offsets, never by rewriting a layer.
 	row := kb.layers[layer].matrix[matrixRow]
 	if startCol < 0 {
 		startCol = 0
@@ -1983,17 +2625,77 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 		endCol = len(row)
 	}
 
-	for col := startCol; col < endCol; col++ {
-		if row[col] == "" {
+	thumbKeys, isThumbRow := kb.thumbX[matrixRow]
+
+	// slotCol maps a drawn slot to the matrix column at that slot. For a
+	// thumb row the cluster is packed by slot, so a key sits where its packed
+	// x lands, not at its matrix column.
+	slotCol := func(slot int) int {
+		if !isThumbRow {
+			return slot
+		}
+		maxX := 0
+		for _, k := range thumbKeys {
+			if k.x > maxX {
+				maxX = k.x
+			}
+		}
+		for _, k := range thumbKeys {
+			x := k.x
+			if right {
+				x = maxX - k.x
+			}
+			if x == slot {
+				return k.col
+			}
+		}
+		return -1
+	}
+
+	for slot := startCol; slot < endCol; slot++ {
+		col := slot
+		if isThumbRow {
+			col = slotCol(slot)
+		}
+		cx := x + kb.colXSide(matrixRow, slot, right, keyWidth, keyGap)
+		if isThumbRow {
+			// On a thumb row the loop variable is already the drawn slot.
+			cx = x + slot*(keyWidth+keyGap)
+		}
+
+		present := col >= 0 && col < len(row) && row[col] != ""
+		var a vilAction
+		if present {
+			if raw {
+				a = kb.layers[layer].actions[matrixRow][col]
+			} else {
+				a = kb.actionAt(layer, matrixRow, col)
+			}
+			if a.none && !strings.HasPrefix(a.raw, "TD(") {
+				present = false
+			}
+		}
+		if !present {
+			if isThumbRow {
+				// Thumb rows draw only the real cluster keys; the filler
+				// slots are not physical keys, so they are left empty.
+				continue
+			}
+			// Every other grid position is a real physical key even with no
+			// action: draw an empty cap and light it while it is held.
+			style := def
+			border := def
+			if kb.pressedAt != nil && kb.pressedAt(matrixRow, col) {
+				style = kbModStyle
+				border = kbModStyle
+			} else if !focused {
+				style = style.Dim(true)
+				border = border.Dim(true)
+			}
+			drawKBButton(scr, cx, y, keyWidth, keyH, "", "", style, border)
 			continue
 		}
 
-		var a vilAction
-		if raw {
-			a = kb.layers[layer].actions[matrixRow][col]
-		} else {
-			a = kb.actionAt(layer, matrixRow, col)
-		}
 		label := a.label
 		top := ""
 		if a.mods != "" {
@@ -2004,14 +2706,17 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 		}
 		if a.transparent && label == "" {
 			label = "▽"
-		} else if a.none && label == "" {
-			label = "."
 		}
 
 		style := def
 		border := style
 		highlighted := false
 		switch {
+		case kb.pressedAt != nil && kb.pressedAt(matrixRow, col):
+			// A held physical key lights, whatever its action.
+			style = kbModStyle
+			border = kbModStyle
+			highlighted = true
 		case matrixRow == wrongRow && col == wrongCol:
 			style = kbErrorStyle
 			border = kbErrorStyle
@@ -2029,10 +2734,12 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 			border = kbModStyle
 			highlighted = true
 		case kb.isHomeKey(matrixRow, col):
+			// The resting keys are tinted only enough to mark them: a dim
+			// green on top of the dimmed inactive half would erase them.
 			if col == activeCol {
 				style = def.Foreground(tcell.ColorGreen).Bold(true)
 			} else {
-				style = def.Foreground(tcell.ColorGreen).Dim(true)
+				style = def.Foreground(tcell.ColorGreen)
 			}
 			border = def
 		}
@@ -2043,6 +2750,83 @@ func (kb *vilKeyboard) drawCols(scr tcell.Screen, layer, matrixRow, startCol, en
 			border = border.Dim(true)
 		}
 
-		drawKBButton(scr, x+kb.thumbColX(matrixRow, col, keyWidth, keyGap), y, keyWidth, keyH, label, top, style, border)
+		drawKBButton(scr, cx, y, keyWidth, keyH, label, top, style, border)
 	}
+}
+
+// drawVilThumbs draws one thumb row. The keys are laid out as a cluster per
+// half, right-aligned to the half's inner edge with the same gaps as the alpha
+// rows; the blank line above the row is already provided by rowY. For a
+// row-split matrix the two halves have their own thumb rows (row and
+// row+halfRows), so each half is drawn from its own row.
+func (t *typer) drawVilThumbs(kb *vilKeyboard, layer, row, x0 int, m kbMetrics, hint vilHint, showTarget bool, wrongRow, wrongCol int, focusLeft, focusRight, raw bool) {
+	y := kb.vilRowY(m.top, row, m.keyH, m.rowGap)
+	leftWidth := kb.halfWidth(false, m.keyWidth, m.keyGap)
+	if kb.splitCols {
+		leftWidth = kb.halfWidthWithGap(kb.halfCols, m.keyWidth, m.keyGap)
+	}
+	halfCols := kb.maxCols
+	if kb.splitCols {
+		halfCols = kb.halfCols
+	}
+	if kb.hasBoard {
+		// Both halves draw their own thumb rows, clustered against the split.
+		t.drawBoardThumbs(kb, layer, x0, y, m, hint, showTarget, wrongRow, wrongCol, focusLeft, focusRight, raw)
+		return
+	}
+	kb.drawCols(t.Scr, layer, row, 0, minInt(halfCols, len(kb.layers[layer].matrix[row])),
+		x0, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusLeft, false, -1, t.blinkOn, raw, t.defaultStyle)
+	if kb.splitCols || kb.halfRows > 0 {
+		rightRow := row
+		rightCols := halfCols
+		if kb.halfRows > 0 {
+			rightRow = row + kb.halfRows
+			rightCols = 0
+		}
+		if rightRow < len(kb.layers[layer].matrix) {
+			kb.drawCols(t.Scr, layer, rightRow, rightCols, len(kb.layers[layer].matrix[rightRow]),
+				x0+leftWidth+m.splitGap, y, m.keyWidth, m.keyGap, m.keyH, hint, showTarget, wrongRow, wrongCol, focusRight, true, -1, t.blinkOn, raw, t.defaultStyle)
+		}
+	}
+}
+
+// matrixAction is the raw action of one matrix cell on one layer.
+func (kb *vilKeyboard) matrixAction(layer, row, col int) (vilAction, bool) {
+	if layer < 0 || layer >= len(kb.layers) {
+		return vilAction{}, false
+	}
+	acts := kb.layers[layer].actions
+	if row < 0 || row >= len(acts) || col < 0 || col >= len(acts[row]) {
+		return vilAction{}, false
+	}
+	return acts[row][col], true
+}
+
+// drawBoardRow draws one drawn row r of one half of the placed board.
+
+func (kb *vilKeyboard) drawBoardRow(scr tcell.Screen, layer, r int, right bool, x, y, keyWidth, keyGap, keyH int, hint vilHint, found bool, wrongRow, wrongCol int, focused bool, activeCol int, blink bool, raw bool, def tcell.Style) {
+	kb.drawCols(scr, layer, r, 0, kb.boardHalfCols, x, y, keyWidth, keyGap, keyH,
+		hint, found, wrongRow, wrongCol, focused, right, activeCol, blink, raw, def)
+}
+
+// drawBoardThumbs draws the thumb cluster of both halves on the board's
+// single thumb row, each wrapped around its half's inner edge.
+func (t *typer) drawBoardThumbs(kb *vilKeyboard, layer, x0, y int, m kbMetrics, hint vilHint, showTarget bool, wrongRow, wrongCol int, focusLeft, focusRight, raw bool) {
+	row := sofleRows
+	rightRow := row + kb.halfRows
+	if rightRow >= len(kb.layers[0].matrix) {
+		rightRow = row
+	}
+	leftWidth := kb.halfWidth(false, m.keyWidth, m.keyGap)
+	kb.drawCols(t.Scr, layer, row, 0, kb.boardHalfCols, x0, y, m.keyWidth, m.keyGap, m.keyH,
+		hint, showTarget, wrongRow, wrongCol, focusLeft, false, -1, t.blinkOn, raw, t.defaultStyle)
+	kb.drawCols(t.Scr, layer, rightRow, 0, kb.boardHalfCols, x0+leftWidth+m.splitGap, y, m.keyWidth, m.keyGap, m.keyH,
+		hint, showTarget, wrongRow, wrongCol, focusRight, true, -1, t.blinkOn, raw, t.defaultStyle)
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

@@ -26,3 +26,35 @@ func TestEnsureReadable(t *testing.T) {
 		t.Errorf("default bg = %v, want %v", got, tcell.ColorGreen)
 	}
 }
+
+func TestWordAheadStyle(t *testing.T) {
+	tp := &typer{
+		currentWordStyle: tcell.StyleDefault.Foreground(tcell.ColorGreen),
+		nextWordStyle:    tcell.StyleDefault.Foreground(tcell.ColorYellow),
+		defaultStyle:     tcell.StyleDefault,
+	}
+
+	// Within the current word every non-space char is the current style.
+	for _, wordByWord := range []bool{false, true} {
+		tp.WordByWord = wordByWord
+		var st tcell.Style
+		if got := tp.wordAheadStyle('a', 0, &st); got != 0 || st != tp.currentWordStyle {
+			t.Errorf("wordByWord=%v current word: inword=%d style=%v", wordByWord, got, st)
+		}
+		// After the space the next word is highlighted only when not word-by-word.
+		if got := tp.wordAheadStyle(' ', 0, &st); got != 1 {
+			t.Errorf("space should advance inword, got %d", got)
+		}
+		want := tp.nextWordStyle
+		if wordByWord {
+			want = tp.defaultStyle
+		}
+		if got := tp.wordAheadStyle('b', 1, &st); got != 1 || st != want {
+			t.Errorf("wordByWord=%v next word: inword=%d style=%v want %v", wordByWord, got, st, want)
+		}
+		// Words beyond the next are never highlighted.
+		if got := tp.wordAheadStyle('c', 2, &st); got != 2 || st != tp.defaultStyle {
+			t.Errorf("third word should be default: inword=%d style=%v", got, st)
+		}
+	}
+}

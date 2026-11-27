@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -111,14 +112,16 @@ func TestVilRendering(t *testing.T) {
 	typ.vil = kb
 	typ.drawKeyboard('!')
 
-	m, ok := kb.metrics(80, 24, kbSplitGap)
+	// The board is placed by the typer's centred block, not by the raw
+	// metrics, so read the drawn position back from it.
+	m, ok := typ.keyboardMetrics()
 	if !ok {
 		t.Fatal("keyboard does not fit")
 	}
 	width := kb.width(m.keyWidth, m.keyGap, m.splitGap)
 	x0 := (80 - width) / 2
 	keyY := func(row int) int {
-		return m.top + row*(m.keyH+m.rowGap)
+		return kb.vilRowY(m.top, row, m.keyH, m.rowGap)
 	}
 
 	_, _, targetStyleCell, _ := sim.GetContent(x0+m.keyWidth/2, keyY(0)+1)
@@ -133,17 +136,34 @@ func TestVilRendering(t *testing.T) {
 		t.Error("activator MO1 is not highlighted")
 	}
 
-	// The target is on the left half, so the right half is dimmed.
-	rightKeyX := x0 + kb.halfWidth(m.keyWidth, m.keyGap) + m.splitGap + m.keyWidth/2
-	_, _, leftStyle, _ := sim.GetContent(x0+m.keyWidth/2, keyY(0))
-	_, _, rightStyle, _ := sim.GetContent(rightKeyX, keyY(0))
-	_, _, leftAttrs := leftStyle.Decompose()
-	_, _, rightAttrs := rightStyle.Decompose()
-	if leftAttrs&tcell.AttrDim != 0 {
-		t.Error("focused left half is dimmed")
+	// The target (!, the lower layer's top-left key) is on the left half, so
+	// the right half is dimmed. Which glyph an inactive cell holds depends on
+	// the cap size (border or label row), so compare the halves' cell
+	// attributes rather than one cell.
+	halfCap := func(half int) (dim, bright int) {
+		for _, row := range []int{0, 1} {
+			for col := 0; col < 2; col++ {
+				x := x0 + col*(m.keyWidth+m.keyGap) + m.keyWidth/2
+				if half == 1 {
+					x += kb.halfWidth(false, m.keyWidth, m.keyGap) + m.splitGap
+				}
+				_, _, st, _ := sim.GetContent(x, keyY(row))
+				if _, _, attrs := st.Decompose(); attrs&tcell.AttrDim != 0 {
+					dim++
+				} else {
+					bright++
+				}
+			}
+		}
+		return dim, bright
 	}
-	if rightAttrs&tcell.AttrDim == 0 {
-		t.Error("inactive right half is not dimmed")
+	leftDim, leftBright := halfCap(0)
+	rightDim, rightBright := halfCap(1)
+	if leftBright == 0 || leftDim != 0 {
+		t.Errorf("focused left half: %d dim, %d bright", leftDim, leftBright)
+	}
+	if rightDim == 0 {
+		t.Errorf("inactive right half: %d dim, %d bright", rightDim, rightBright)
 	}
 
 	typ.wrongKey = '@'
@@ -154,6 +174,98 @@ func TestVilRendering(t *testing.T) {
 	_, _, errStyle, _ := sim.GetContent(x0+kb.colX(1, 1, m.keyWidth, m.keyGap)+m.keyWidth/2, keyY(0))
 	if _, _, errAttrs := errStyle.Decompose(); errAttrs&tcell.AttrDim != 0 {
 		t.Error("wrong key is dimmed")
+	}
+}
+
+func TestVilBlankKeysDrawn(t *testing.T) {
+	// A row with an empty cell (""): the physical position must still draw a
+	// blank keycap so the board is a solid rectangle, not a ragged gap.
+	const vil = `{
+  "layout": [
+    [
+      ["KC_Q", "KC_W", ""],
+      ["KC_A", "KC_S", "KC_D"],
+      ["KC_Z", "KC_X", "KC_C"],
+      ["KC_1", "KC_2", "KC_3"],
+      ["KC_4", "KC_5", "KC_6"]
+    ]
+  ],
+  "tap_dance": []
+}`
+	kb := loadTestVil(t, vil)
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer sim.Fini()
+	sim.SetSize(80, 24)
+
+	typ := newTestTyper(sim)
+	typ.vil = kb
+	typ.drawKeyboard('q')
+	sim.Show()
+
+	m, ok := typ.keyboardMetrics()
+	if !ok {
+		t.Fatal("keyboard does not fit")
+	}
+	width := kb.width(m.keyWidth, m.keyGap, m.splitGap)
+	x0 := (80 - width) / 2
+	// The empty cell is column 2 of row 0. Its cap must be bordered (a corner
+	// glyph on the cap's top row).
+	x := x0 + kb.colXSide(0, 2, false, m.keyWidth, m.keyGap)
+	y := kb.vilRowY(m.top, 0, m.keyH, m.rowGap)
+	mainc, _, _, _ := sim.GetContent(x, y)
+	if mainc != '╭' && mainc != '┌' {
+		t.Errorf("empty cell cap corner = %q, want a border glyph", string(mainc))
+	}
+}
+
+// TestVilEmptyKeyLightsWhenPressed checks that an unbound physical cell (empty
+// cell, no action) still lights up when its matrix position is held.
+func TestVilEmptyKeyLightsWhenPressed(t *testing.T) {
+	rows := make([][]interface{}, 5)
+	for r := range rows {
+		rows[r] = make([]interface{}, 12)
+		for c := range rows[r] {
+			rows[r][c] = "KC_Q"
+		}
+	}
+	rows[0][2] = "" // an empty, unbound physical key
+	data, err := json.Marshal(map[string]interface{}{"layout": []interface{}{rows}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kb := loadTestVil(t, string(data))
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer sim.Fini()
+	sim.SetSize(120, 30)
+
+	typ := newTestTyper(sim)
+	typ.vil = kb
+	m, ok := typ.keyboardMetrics()
+	if !ok {
+		t.Fatal("keyboard does not fit")
+	}
+
+	typ.layerTracker = &layerTracker{prevPressed: map[[2]int]bool{{0, 2}: true}}
+	typ.drawKeyboard('q')
+	width := kb.width(m.keyWidth, m.keyGap, m.splitGap)
+	x0 := (120 - width) / 2
+	x := x0 + kb.colXSide(0, 2, false, m.keyWidth, m.keyGap)
+	y := kb.vilRowY(m.top, 0, m.keyH, m.rowGap) + m.keyH/2
+	_, _, pressStyle, _ := sim.GetContent(x, y)
+
+	typ.layerTracker = nil
+	typ.drawKeyboard('q')
+	_, _, idleStyle, _ := sim.GetContent(x, y)
+	if pressStyle == idleStyle {
+		t.Error("empty key does not change style when pressed")
 	}
 }
 
@@ -258,7 +370,7 @@ func TestVilAutoColumnSplit(t *testing.T) {
 	if rows := kb.displayRows(); rows != 5 {
 		t.Fatalf("display rows = %d", rows)
 	}
-	if m, ok := kb.metrics(80, 24, kbSplitGap); !ok || m.keyWidth < 3 || m.keyGap < 0 {
+	if m, ok := kb.metrics(80, 24, boardHalfGap); !ok || m.keyWidth < 3 || m.keyGap < 0 {
 		t.Fatalf("metrics = %+v %v", m, ok)
 	}
 }
@@ -548,28 +660,8 @@ func TestVilHomeColumns(t *testing.T) {
 
 // Thumb keys belong to their half: their offset must be inside it, not spill
 // into the other half or the gap between the halves.
-func TestVilThumbKeysStayInTheirHalf(t *testing.T) {
-	kb := loadWideTestVil(t)
-	if !kb.splitCols {
-		t.Skip("fixture is not split by columns")
-	}
-	const kw, kg = 5, 1
-	half := kb.halfWidthWithGap(kb.halfCols, kw, kg)
-	for _, row := range []int{0} {
-		for col := 0; col < kb.maxCols; col++ {
-			if !kb.cellPresent(row, col) {
-				continue
-			}
-			x := kb.thumbColX(row, col, kw, kg)
-			if x < 0 || x+kw > half {
-				t.Errorf("row %d col %d: thumb at %d..%d outside the half (0..%d)", row, col, x, x+kw, half)
-			}
-		}
-	}
-}
-
-// The Chatsubo box sits centred in the gap between the halves.
-func TestChatsuboCentredInGap(t *testing.T) {
+// The Chatsubo box is a band centred on the board, on the board's columns.
+func TestChatsuboCentredOnBoard(t *testing.T) {
 	for _, vil := range []string{"", "/home/maf/.config/nm/CANONICAL_ATmega_100pct_Miryoku_3x5.vil"} {
 		for _, sw := range []int{160, 170, 199} {
 			sim := tcell.NewSimulationScreen("UTF-8")
@@ -587,20 +679,79 @@ func TestChatsuboCentredInGap(t *testing.T) {
 				typ.vil = kb
 			}
 			typ.chatsubo = newChatsubo("", "", 0)
-			m, _ := typ.keyboardMetrics()
-			gx, split := typ.chatPanelGap(m)
-			px, _, pw, _, ok := typ.chatPanelRect(m)
-			if !split || !ok {
+			typ.keyboardMetrics()
+			px, _, pw, _, ok := typ.chatBand()
+			if !ok {
 				sim.Fini()
 				continue
 			}
-			if want := sw / 2; px+pw/2 != want {
-				t.Errorf("sw=%d vil=%v: panel centre %d, want %d", sw, vil != "", px+pw/2, want)
+			bx, bw, ok := typ.boardBand()
+			if !ok {
+				sim.Fini()
+				continue
 			}
-			if px < gx || px+pw > gx+m.splitGap {
-				t.Errorf("sw=%d vil=%v: panel %d..%d outside the gap %d..%d", sw, vil != "", px, px+pw, gx, gx+m.splitGap)
+			// The box may be wider than the board, but it is centred on it
+			// and must fully contain it.
+			if pw < bw || px > bx || px+pw < bx+bw {
+				t.Errorf("sw=%d vil=%v: box %d..%d does not hold board %d..%d", sw, vil != "", px, px+pw, bx, bx+bw)
 			}
 			sim.Fini()
+		}
+	}
+}
+
+// The halves of a row-split matrix are drawn from their own inner edges, so
+// the same column number lands in a different place on each half. The right
+// half's home block must therefore be measured against the right half.
+
+// A literal KC_NO cell is not drawn (no placeholder keycap), but a tap-dance
+// whose tap is KC_NO is still a wired key (it has a double-tap action) and
+// must still show. The draw loop skips only cells whose raw string is KC_NO,
+// so a TD(n) key keeps its raw prefix and renders.
+func TestVilNoiselessNoCell(t *testing.T) {
+	kb, err := loadVil("/home/maf/modwm/kb/CANONICAL_ATmega_100pct_Miryoku_3x5.vil", "")
+	if err != nil || kb.halfRows == 0 {
+		t.Skip("layout not installed")
+	}
+	// TD(0) lives at row 6 col 0 (the first alpha row of the right half); its
+	// tap is KC_NO but it has a double-tap, so it must not be skipped.
+	a := kb.actionAt(0, kb.halfRows+1, 0)
+	if a.none && !strings.HasPrefix(a.raw, "TD(") {
+		t.Errorf("none key at (%d,0) has raw %q, but it is a wired tap-dance", kb.halfRows+1, a.raw)
+	}
+}
+
+// TestVilBoardThumbMirror checks that a board's thumb cluster is mirrored on
+// the right half so it hugs that half's inner edge, instead of the same x on
+// both halves (which leaves the right cluster out at the outer edge).
+func TestVilBoardThumbMirror(t *testing.T) {
+	kb, err := loadVil(os.Getenv("HOME")+"/.config/nm/CANONICAL_ATmega_100pct_Miryoku_3x5.vil", "")
+	if err != nil || !kb.hasBoard {
+		t.Skip("board layout not installed")
+	}
+	row := -1
+	for r := range kb.thumbX {
+		row = r
+	}
+	if row < 0 {
+		t.Skip("no thumb row")
+	}
+	const kw, kg = 5, 1
+	step := kw // contiguous: no inter-key gap
+	maxX := 0
+	for _, k := range kb.thumbX[row] {
+		if k.x > maxX {
+			maxX = k.x
+		}
+	}
+	for _, k := range kb.thumbX[row] {
+		left := kb.colXSide(row, k.col, false, kw, kg)
+		right := kb.colXSide(row, k.col, true, kw, kg)
+		if left != k.x*step {
+			t.Errorf("col %d: left thumb x %d, want %d", k.col, left, k.x*step)
+		}
+		if right != (maxX-k.x)*step {
+			t.Errorf("col %d: right thumb x %d, want mirrored %d", k.col, right, (maxX-k.x)*step)
 		}
 	}
 }

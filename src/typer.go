@@ -8,7 +8,6 @@ import (
 	"os"
 	"runtime"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -24,8 +23,8 @@ const (
 )
 
 // layoutSplitPad is the blank rows kept between the practice text and the
-// keyboard/chatsubo block.
-const layoutSplitPad = 3
+// keyboard/chatsubo block: one, so the block reads as one tight stack.
+const layoutSplitPad = 1
 
 // statsHistoryMax caps how many WPM samples the equalizer keeps.
 const statsHistoryMax = 120
@@ -52,6 +51,10 @@ type typer struct {
 	// instead of the current and next word.
 	HighlightChars int
 
+	// WordByWord highlights only the word under the cursor, leaving the
+	// following word at the default style.
+	WordByWord bool
+
 	currentWordStyle    tcell.Style
 	nextWordStyle       tcell.Style
 	incorrectSpaceStyle tcell.Style
@@ -64,18 +67,30 @@ type typer struct {
 	wrongUntil time.Time
 
 	// Optional Vial keymap; when set it replaces the built-in Colemak-DH matrix.
-	vil          *vilKeyboard
+	vil *vilKeyboard
+	// vilFallback is set when the Vial layout is too wide for the window and
+	// the built-in Colemak-DH matrix is drawn instead.
+	vilFallback  bool
 	previewLayer int
 	blinkOn      bool
 	chatsubo     *chatsubo
 	sprint       bool
 	panelLabel   string
-
-	// panelDrawn reports whether the chatsubo panel was actually painted
-	// this frame; when it is not (e.g. too narrow a terminal) the live
-	// stats fall back to the floating HUD above the text.
-	panelDrawn   bool
-	layoutTop    int
+	// sprintMessage is the status line shown in the box's commentary row while
+	// the next sprint summary is being generated.
+	sprintMessage string
+	layoutTop     int
+	statsY        int
+	// boxTop and boxH are the Chatsubo box's place in the centred block,
+	// recorded by keyboardMetrics so the box and board share one frame.
+	boxTop int
+	boxH   int
+	// statsTop is the equalizer row of the block; the readout is the row
+	// under it.
+	statsTop int
+	// parts is the block split into its three parts (box, text, keys, stats),
+	// recorded by keyboardMetrics so every band draws inside its own rows.
+	parts        partLayout
 	hintText     string
 	layerTracker *layerTracker
 
@@ -108,6 +123,25 @@ type typer struct {
 	neonPink  tcell.Color
 	neonGreen tcell.Color
 	neonAmber tcell.Color
+}
+
+// wordAheadStyle picks the style for a not-yet-typed character at or past the
+// cursor, given the word index the cursor is currently in (inword). The current
+// word is highlighted; the next word is highlighted too unless WordByWord is
+// set, in which case only the current word stands out. It returns the updated
+// word index and writes the chosen style through style.
+func (t *typer) wordAheadStyle(c rune, inword int, style *tcell.Style) int {
+	switch {
+	case c == ' ':
+		inword++
+	case inword == 0:
+		*style = t.currentWordStyle
+	case inword == 1 && !t.WordByWord:
+		*style = t.nextWordStyle
+	default:
+		*style = t.defaultStyle
+	}
+	return inword
 }
 
 func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
@@ -192,21 +226,61 @@ func ensureReadable(fg, bg tcell.Color) tcell.Color {
 	return fg
 }
 
+// segsWidth is the total rendered width of a stats readout in cells.
+func segsWidth(segs []statsSeg) int {
+	w := 0
+	for _, sg := range segs {
+		w += len([]rune(sg.s))
+	}
+	return w
+}
+
 // drawLiveStats renders the cyberpunk speed readout centered on cx at row y.
 // The WPM figure is colour-zoned by speed and flashes on the moment the
 // reading changes, like a car HUD.
 func (t *typer) drawLiveStats(cx, y, wpm, cpm int, acc float64, errs int) {
-	segs := t.statsSegments(wpm, cpm, acc, errs, t.statsFlashOn(), true, true)
-	fieldW := 0
-	for _, sg := range segs {
-		fieldW += len([]rune(sg.s))
+	sw, _ := t.Scr.Size()
+	flash := t.statsFlashOn()
+	// On a narrow window drop the least-useful figures (CPM, errors, then the
+	// last/best tail) until the readout fits on one line, so it never wraps:
+	// first the stats band's width, then the window itself.
+	// The band's rows are the window's, less one clear cell on each side.
+	fit := sw - 2
+	if fit < 1 {
+		fit = 1
 	}
+	segs := t.statsSegmentsFull(wpm, cpm, acc, errs, flash, true, true, true)
+	if w := segsWidth(segs); w > fit {
+		segs = t.statsSegmentsFull(wpm, cpm, acc, errs, flash, false, true, true)
+	}
+	if w := segsWidth(segs); w > fit {
+		segs = t.statsSegmentsFull(wpm, cpm, acc, errs, false, false, false, true)
+	}
+	if w := segsWidth(segs); w > fit {
+		segs = t.statsSegmentsFull(wpm, cpm, acc, errs, false, false, false, false)
+	}
+	if w := segsWidth(segs); w > fit {
+		// Still too wide for the last usable variant: keep the speed figure.
+		segs = segs[:1]
+	}
+	fieldW := segsWidth(segs)
 	startX := cx - fieldW/2
+	if startX < 0 {
+		startX = 0
+	}
+	if startX+fieldW > sw {
+		startX = sw - fieldW
+	}
+	if startX < 0 {
+		startX = 0
+	}
 
 	// Wipe the whole band (a little wider than the content) first: cx can
 	// shift between frames and a wide rune leaves a trailing cell behind.
 	for bx := startX - 1; bx <= startX+fieldW; bx++ {
-		t.Scr.SetContent(bx, y, ' ', nil, t.defaultStyle)
+		if bx >= 0 && bx < sw {
+			t.Scr.SetContent(bx, y, ' ', nil, t.defaultStyle)
+		}
 	}
 
 	x := startX
@@ -220,8 +294,10 @@ func (t *typer) drawLiveStats(cx, y, wpm, cpm int, acc float64, errs int) {
 		x += len(r)
 	}
 
-	// Equalizer above the numbers.
-	t.drawEqualizer(startX, y-1, fieldW, 1, t.defaultStyle)
+	// Equalizer above the numbers, when the stats band has a row for it.
+	if t.parts.stats.H == 2 {
+		t.drawEqualizer(startX, y-1, fieldW, 1, t.defaultStyle)
+	}
 }
 
 // drawEqualizer renders the rolling WPM history as a block equalizer. Bars
@@ -372,31 +448,27 @@ func (t *typer) statsSegmentsFull(wpm, cpm int, acc float64, errs int, flashOn, 
 	sep := t.defaultStyle.Foreground(t.neonPink)
 	segs := []statsSeg{
 		{fmt.Sprintf("%s %d WPM", arrow, wpm), wpmStyle},
-		{" · ", sep},
 	}
 	if showCPM {
 		segs = append(segs,
-			statsSeg{fmt.Sprintf("%d CPM", cpm), sep},
 			statsSeg{" · ", sep},
+			statsSeg{fmt.Sprintf("%d CPM", cpm), sep},
 		)
 	}
 	segs = append(segs,
-		statsSeg{fmt.Sprintf("%.0f%%", acc), t.defaultStyle.Foreground(accColor).Bold(true)},
 		statsSeg{" · ", sep},
+		statsSeg{fmt.Sprintf("%.0f%%", acc), t.defaultStyle.Foreground(accColor).Bold(true)},
 	)
 	if showErrs {
 		segs = append(segs,
+			statsSeg{" · ", sep},
 			statsSeg{fmt.Sprintf("%d ERR", errs), t.defaultStyle.Foreground(t.neonAmber)},
 		)
 	}
-	if !showScore {
-		// Drop the dangling separator so the readout ends on a value.
-		for len(segs) > 0 && strings.TrimSpace(segs[len(segs)-1].s) == "·" {
-			segs = segs[:len(segs)-1]
-		}
-		return segs
+	if showScore {
+		segs = append(segs, t.scoreSegments()...)
 	}
-	return append(segs, t.scoreSegments()...)
+	return segs
 }
 
 // scoreSegments renders the last and best score. Best is relative to the WPM
@@ -435,14 +507,24 @@ func (t *typer) saveScore() {
 }
 
 // drawPanelStats paints the readout inside the chatsubo body on row, clipped
-// to maxCols. If it still does not fit, it retries without the CPM figure and
-// then without the error count so LAST/BEST stay visible.
+// to maxCols. In a narrow panel the figures drop one at a time, least useful
+// first: the error count, then CPM, then the LAST/BEST tail. The flash is off
+// in the try-outs because it decides the width of the WPM figure itself.
 func (t *typer) drawPanelStats(x, row, maxCols, wpm, cpm int, acc float64, errs int) {
-	variants := []struct {
-		showCPM, showErrs, showScore bool
-	}{{true, true, true}, {false, true, true}, {false, false, true}, {false, false, false}}
+	flash := t.statsFlashOn()
+	type variant struct {
+		flash, showCPM, showErrs, showScore bool
+	}
+	variants := []variant{
+		{flash, true, true, true},
+		{flash, false, true, true},
+		{false, true, true, true},
+		{false, false, true, true},
+		{false, false, false, true},
+		{false, false, false, false},
+	}
 	for _, v := range variants {
-		segs := t.statsSegmentsFull(wpm, cpm, acc, errs, t.statsFlashOn(), v.showCPM, v.showErrs, v.showScore)
+		segs := t.statsSegmentsFull(wpm, cpm, acc, errs, v.flash, v.showCPM, v.showErrs, v.showScore)
 		if t.paintPanelStats(x, row, maxCols, segs) {
 			return
 		}
@@ -565,99 +647,49 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	textW, nr := calcStringDimensions(s)
 
 	t.layoutTop = -1
-	m, kbOK := t.keyboardMetrics()
+	t.keyboardMetrics()
 
 	nc := textW
 	x := 0
 	y := (sh - nr) / 2
 	statsY := y - 2
-	placed := false
 
-	if t.sprint && kbOK {
-		// Sprint mode: center the keyboard/chatsubo block and type inside the
-		// chatsubo body.
-		kbTop := (sh - m.height) / 2
-		if kbTop < 2 {
-			kbTop = 2
+	// The practice text draws inside the chatsubo box: its interior columns
+	// (inside the borders and a padding column each side) and the box's text
+	// rows. Position, width and row count all come from the box band.
+	textTop, _, _, _ := t.layoutFrame()
+	bx, _, bw, _, boxOK := t.chatBand()
+	if boxOK {
+		x = bx + 2
+		nc = bw - 4
+		if nc < 1 {
+			nc = 1
 		}
-		t.layoutTop = kbTop
-		if m2, ok := t.keyboardMetrics(); ok {
-			if tx, ty, tw, rows, ok := t.sprintTextArea(m2); ok {
-				nc = tw
-				x = tx
-				if nr > rows {
-					nr = rows
-				}
-				y = ty + (rows-nr)/2
-				placed = true
-			}
-		}
-	}
-
-	if !placed {
-		t.layoutTop = -1
-
-		// The text area spans the full keyboard width, so its left and right
-		// edges line up with the outer keycaps of both splits.
-		if kbOK {
-			if w := t.keyboardWidth(m); w > 0 {
-				nc = w
-			}
-		}
-		if nc > sw {
-			nc = sw
-		}
+	} else {
+		nc = sw - 2
 		if nc < 1 {
 			nc = 1
 		}
 		x = (sw - nc) / 2
-
-		// Center the whole block (text, attribution/timer, gap, keyboard) both
-		// horizontally and vertically. The keyboard itself is centered by the
-		// metrics code; here we position the text and the vertical offset.
-		y = (sh - nr) / 2
-		if kbOK {
-			extra := 0
-			if attribution != "" {
-				_, ah := calcStringDimensions(attribution)
-				extra += ah
-			}
-			if timeLimit != -1 {
-				extra++
-			}
-			// Reserve room for the floating HUD unless the chatsubo panel
-			// will carry the stats instead.
-			statsRows := 0
-			_, _, _, _, panelOK := t.chatPanelRect(m)
-			if !t.sprint && !(t.chatsubo != nil && panelOK) {
-				statsRows = 3 // blank spacer + equalizer + live stats line
-			}
-			contentH := statsRows + nr + extra + layoutSplitPad + m.height
-			if contentH <= sh {
-				y = (sh-contentH)/2 + statsRows
-				statsY = y - 2
-				t.layoutTop = y + nr + extra + layoutSplitPad
-			} else {
-				y = 0
-				statsY = nr + 1
-				t.layoutTop = sh - m.height
-				if t.layoutTop < nr+extra+layoutSplitPad {
-					t.layoutTop = nr + extra + layoutSplitPad
-				}
-			}
-		}
-		if y < 0 {
-			y = 0
-		}
-		// Keep the stats block (equalizer + line) clear of the keyboard and
-		// on screen when space is tight.
-		if kbOK && statsY-1+m.height > sh {
-			statsY = sh - m.height
-		}
-		if statsY < 1 {
-			statsY = 1
+		if x < 1 {
+			x = 1
 		}
 	}
+	// Lines the box cannot hold are clipped, so a wrapped paragraph never
+	// spills past the box's bottom border. A short text starts at the top.
+	if nr > t.textRows() {
+		nr = t.textRows()
+	}
+	y = textTop
+	if y < 0 {
+		y = 0
+	}
+	statsY = t.statsTop + 1
+	if statsY > sh-1 {
+		statsY = sh - 1
+	}
+
+	t.statsY = statsY
 
 	if t.chatsubo != nil {
 		t.chatsubo.resetSegment()
@@ -716,6 +748,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 		if t.sprint {
 			t.panelLabel = " chatsubo "
+			t.sprintMessage = ""
 			if timeLimit != -1 && !startTime.IsZero() {
 				remaining := timeLimit - time.Now().Sub(startTime)
 				secs := int(remaining/time.Second) + 1
@@ -756,6 +789,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 		cy := y
 		inword := -1
 		ahead := 0
+		bottom := y + nr - 1
 
 		for i := range text {
 			style := t.defaultStyle
@@ -774,7 +808,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 				inword = 0
 			}
 
-			if i >= idx && t.HighlightChars > 0 {
+			if i >= idx && t.HighlightChars > 0 && !t.WordByWord {
 				if text[i] == ' ' {
 					style = t.defaultStyle
 				} else if ahead < t.HighlightChars {
@@ -786,15 +820,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 					ahead++
 				}
 			} else if i >= idx {
-				if text[i] == ' ' {
-					inword++
-				} else if inword == 0 {
-					style = t.currentWordStyle
-				} else if inword == 1 {
-					style = t.nextWordStyle
-				} else {
-					style = t.defaultStyle
-				}
+				inword = t.wordAheadStyle(text[i], inword, &style)
 			} else if text[i] != typed[i] {
 				if text[i] == ' ' {
 					style = t.incorrectSpaceStyle
@@ -805,6 +831,11 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 				style = t.correctStyle
 			}
 
+			// Keep every character inside the text's band: past its last row
+			// the text is clipped, never drawn over another part.
+			if cy > bottom {
+				break
+			}
 			scr.SetContent(cx, cy, text[i], nil, style)
 			cx++
 		}
@@ -821,22 +852,10 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 		}
 
-		// Show the HUD unless the chatsubo panel is carrying the stats.
-		if !t.panelDrawn {
-			hudX, hudY := x+nc/2, statsY
-			if t.sprint {
-				// Sprint draws its text inside the panel, so the HUD goes
-				// just above the panel frame, centered on the screen.
-				sw, _ := t.Scr.Size()
-				hudX = sw / 2
-				if m, ok := t.keyboardMetrics(); ok && m.top > 0 {
-					hudY = m.top - 1
-				} else {
-					hudY = 1
-				}
-			}
-			t.drawLiveStats(hudX, hudY, t.curWpm, t.curCpm, t.curAcc, t.curErrs)
-		}
+		// The live stats render as their own line below the keys, so they
+		// always draw.
+		hudX, hudY := x+nc/2, statsY
+		t.drawLiveStats(hudX, hudY, t.curWpm, t.curCpm, t.curAcc, t.curErrs)
 
 		//Potentially inefficient, but seems to be good enough
 

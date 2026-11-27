@@ -9,17 +9,22 @@ import (
 	"github.com/gdamore/tcell"
 )
 
-// The box is a panel in the gap between the keyboard halves.
+// The box is a band above the keys, below the practice text's band. It carries
+// the guidance line and the LLM commentary; the stats (equalizer plus readout)
+// render as a separate band beneath the keys. A book sprint uses the same box,
+// with the countdown in its rule instead of commentary.
 const (
-	chatsuboBoxWidth       = 40
-	chatsuboMinScreenWidth = 100
-	chatsuboCompactHeight  = 4
-	chatsuboFullHeight     = 8
-	chatsuboMaxKeyRows     = 3
-	chatsuboExtraRows      = 3
+	// chatsuboBoxWidth is the upper bound on the box in its standard place; it
+	// is drawn exactly as wide as the keyboard, so the two share one rectangle.
+	// 60 leaves 56 usable columns for the guidance and commentary; the stats
+	// are a separate centred line below.
+	chatsuboBoxWidth = 60
+	// chatsuboBoxMinWidth is the narrowest readable box; below it the box is
+	// dropped and only the guidance line remains.
+	chatsuboBoxMinWidth   = 12
+	chatsuboCompactHeight = 4
 
-	// Two columns of horizontal padding inside each border, and one blank
-	// padding row above and below the full-size body.
+	// Two columns of horizontal padding inside each border.
 	chatsuboBodyCols = chatsuboBoxWidth - 6
 
 	// Guidance uses one body row; the LLM can fill the rest of the panel.
@@ -291,154 +296,161 @@ func (t *typer) maybeChatsubo(text, typed []rune, idx int) {
 	go c.request(snap, t.Scr)
 }
 
-// chatPanelGap returns the left edge of the gap between the keyboard halves
-// and whether the current layout is split.
-func (t *typer) chatPanelGap(m kbMetrics) (int, bool) {
-	sw, _ := t.Scr.Size()
-	if t.vil != nil {
-		kb := t.vil
-		width := kb.width(m.keyWidth, m.keyGap, m.splitGap)
-		x0 := (sw - width) / 2
-		switch {
-		case kb.splitCols:
-			left := kb.halfWidthWithGap(kb.halfCols, m.keyWidth, m.keyGap)
-			return x0 + left, true
-		case kb.halfRows > 0:
-			left := kb.halfWidthWithGap(kb.maxCols, m.keyWidth, m.keyGap)
-			return x0 + left, true
-		}
-		return 0, false
-	}
-
-	if !t.builtinSplit(m) {
-		return 0, false
-	}
-	width := kbSplitWidth(m.keyWidth, m.keyGap, m.splitGap)
-	x0 := (sw - width) / 2
-	return x0 + kbSplitLeftWidth(m.keyWidth, m.keyGap) + kbSplitLeftPad(m.keyWidth, m.keyGap), true
+// blockBoxHeight is the box's height in the centred block: the same ladder as
+// blockBoxHeight is the box's height in the centred block: the same ladder as
+// chatsuboBoxHeight, spending the block's spare rows on the empty body first,
+// so the parenthesised box grows before the board does.
+func (t *typer) blockBoxHeight(sh int) int {
+	return t.blockBoxHeightFor(sh, boardMinRows())
 }
 
-// chatPanelRect returns the panel rectangle, or ok=false when the layout is
-// not split or the panel cannot fit.
-func (t *typer) chatPanelRect(m kbMetrics) (x, y, width, height int, ok bool) {
+// blockBoxHeightFor is blockBoxHeight with the board's drawn height known, so
+// the box can grow into the rows the block leaves before the caps do. It takes
+// the height as an argument because keyboardMetrics needs the box to size the
+// board.
+func (t *typer) blockBoxHeightFor(sh, boardH int) int {
+	boxH := chatsuboBoxHeight(sh)
+	if boxH > sh-2 {
+		boxH = sh - 2
+	}
+	if boxH < 3 {
+		boxH = 3
+	}
+	used := boxH + layoutBandPad*2 + layoutTextRows + boardH + layoutStatsRows
+	if spare := blockRoom(sh) - used; spare > 0 {
+		if room := chatsuboMaxHeight - boxH; spare > room {
+			spare = room
+		}
+		boxH += spare
+	}
+	return boxH
+}
+
+// chatsuboMaxHeight is the tallest box body: two border rows, a guidance row
+// and up to four commentary rows.
+const chatsuboMaxHeight = 6
+
+// chatsuboBoxHeight sizes the box to the window: title, guidance and a few
+// commentary rows in a tall window, a single commentary row in a short one,
+// and never more than a quarter of it so the board keeps its room.
+func chatsuboBoxHeight(screenHeight int) int {
+	h := 3 // title, one body row
+	if screenHeight >= 36 {
+		h = chatsuboMaxHeight
+	} else if screenHeight >= 24 {
+		h = chatsuboCompactHeight // room for the guidance and a commentary row
+	}
+	if max := screenHeight / 5; h > max {
+		h = max
+	}
+	if h < 3 {
+		h = 3 // title, one body row
+	}
+	return h
+}
+
+// chatBand returns the rectangle of the Chatsubo box in the centred block:
+// the block's top band, as wide as the board and centred on it, so the box and
+// the keys read as one rectangle.
+func (t *typer) chatBand() (x, y, width, height int, ok bool) {
 	sw, sh := t.Scr.Size()
-	gapX, split := t.chatPanelGap(m)
-	if !split {
-		return 0, 0, 0, 0, false
-	}
-
+	// The box follows the board: exactly as wide, on the same columns, so the
+	// two read as one block on any terminal. On a very narrow window the box
+	// gives up its sides before the board does.
 	width = chatsuboBoxWidth
-	if width > m.splitGap-2 {
-		width = m.splitGap - 2
+	x = (sw - width) / 2
+	if _, _, kbOK := t.boardBand(); kbOK {
+		// The box spans the full screen width, centred, so the commentary has
+		// room; the board sits inside it on the columns below.
+		x = 1
+		width = sw - 2
 	}
-	if width > sw-8 {
-		width = sw - 8
+	if width > sw-2 {
+		width = sw - 2
+		x = 1
 	}
-	if width < 12 {
+	if width < chatsuboBoxMinWidth {
 		return 0, 0, 0, 0, false
 	}
-
-	height = chatsuboMaxKeyRows*m.keyH + (chatsuboMaxKeyRows-1)*m.rowGap + chatsuboExtraRows
-	if height < chatsuboCompactHeight {
-		height = chatsuboCompactHeight
+	y = t.boxTop
+	height = t.parts.chat.H
+	if height < 3 {
+		height = 3
 	}
-	if height > m.height {
-		height = m.height
+	if y < 0 {
+		y = 0
 	}
-	if height > sh-m.top {
-		height = sh - m.top
+	if y+height > sh {
+		height = sh - y
 	}
-	if height < chatsuboCompactHeight+1 {
-		return 0, 0, 0, 0, false
-	}
-
-	// The panel lives in the gap between the halves and must never cover a
-	// key: centre it there, not on the screen.
-	x = gapX + (m.splitGap-width)/2
-	if x < gapX {
-		x = gapX
-	}
-	y = m.top + (m.height-height)/2
-	if x < 1 || x+width > sw-1 {
+	if height < 3 {
 		return 0, 0, 0, 0, false
 	}
 	return x, y, width, height, true
 }
 
-// sprintTextArea is the typing area inside the chatsubo body.
+// boardSplit reports whether the board is drawn as two halves on the matrix's
+// own rows rather than through the compact single-line path.
+func (t *typer) boardSplit(m kbMetrics) bool {
+	return t.vil != nil && t.vil.hasBoard && !t.compactBoard(m)
+}
+
+// boardBand is the board's drawn column band and width.
+func (t *typer) boardBand() (x, width int, ok bool) {
+	sw, _ := t.Scr.Size()
+	m, mOK := t.keyboardMetrics()
+	if !mOK {
+		return 0, 0, false
+	}
+	width = t.keyboardWidth(m)
+	if width <= 0 {
+		return 0, 0, false
+	}
+	return (sw - width) / 2, width, true
+}
+
+// sprintTextArea is the typing area in the practice text band under the
+// sprint panel: the text's own band, inset by one column each side.
 func (t *typer) sprintTextArea(m kbMetrics) (x, y, width, rows int, ok bool) {
-	px, py, pw, ph, ok := t.chatPanelRect(m)
-	if !ok {
+	b := t.parts.text
+	rows = b.H
+	if rows < 1 {
 		return 0, 0, 0, 0, false
 	}
-	topPad := 0
-	rows = ph - 2
-	if ph >= chatsuboFullHeight {
-		topPad = 1
-		rows = ph - 4
-	}
-	if rows < 1 || pw < 12 {
+	boardW := t.keyboardWidth(m)
+	if boardW <= 0 {
 		return 0, 0, 0, 0, false
 	}
-	return px + 3, py + 1 + topPad, pw - 6, rows, true
+	width = boardW - 2
+	if width < 1 {
+		return 0, 0, 0, 0, false
+	}
+	x = (t.screenWidth() - width) / 2
+	y = b.Y
+	return x, y, width, rows, true
 }
 
-func (t *typer) drawSprintPanel(x, y, width, height int) {
-	border := t.defaultStyle.Foreground(tcell.ColorTeal)
-	label := t.panelLabel
-	if label == "" || len([]rune(label)) > width-2 {
-		label = " chatsubo "
-	}
-	top := "╭" + label + strings.Repeat("─", width-2-len([]rune(label))) + "╮"
-	drawString(t.Scr, x, y, top, -1, border)
-	for row := 1; row < height-1; row++ {
-		line := "│" + strings.Repeat(" ", width-2) + "│"
-		drawString(t.Scr, x, y+row, line, -1, t.defaultStyle)
-	}
-	bottom := "╰" + strings.Repeat("─", width-2) + "╯"
-	drawString(t.Scr, x, y+height-1, bottom, -1, border)
+// screenWidth returns the window's width.
+func (t *typer) screenWidth() int {
+	sw, _ := t.Scr.Size()
+	return sw
 }
 
-// showSprintMessage clears the sprint panel and shows a short status message
-// while the next summary is being generated.
+// showSprintMessage draws the sprint block with a status line in the box's
+// commentary row while the next summary is being generated.
 func (t *typer) showSprintMessage(msg string) {
 	if t.Scr == nil || !t.sprint {
 		return
 	}
-	_, sh := t.Scr.Size()
 	t.layoutTop = -1
-	m, ok := t.keyboardMetrics()
-	if !ok {
-		return
-	}
-	top := (sh - m.height) / 2
-	if top < 2 {
-		top = 2
-	}
-	t.layoutTop = top
-	m, ok = t.keyboardMetrics()
-	if !ok {
-		return
-	}
-	x, y, width, height, ok := t.chatPanelRect(m)
-	if !ok {
-		return
-	}
 	t.panelLabel = " chatsubo "
+	t.sprintMessage = msg
 	t.drawKeyboard(0)
-	t.drawSprintPanel(x, y, width, height)
-	if bx, by, bw, rows, ok := t.sprintTextArea(m); ok {
-		r := []rune(msg)
-		if len(r) > bw {
-			r = r[:bw]
-		}
-		drawString(t.Scr, bx+(bw-len(r))/2, by+rows/2, string(r), -1, t.defaultStyle)
-	}
+	t.drawChatsubo()
 	t.Scr.Show()
 }
 
 func (t *typer) drawChatsubo() {
-	t.panelDrawn = false
 	if t.Scr == nil {
 		return
 	}
@@ -446,122 +458,75 @@ func (t *typer) drawChatsubo() {
 		return
 	}
 
-	m, ok := t.keyboardMetrics()
+	x, y, width, height, ok := t.chatBand()
 	if !ok {
 		return
 	}
-	x, y, width, height, ok := t.chatPanelRect(m)
-	if !ok {
-		return
-	}
-	if t.sprint {
-		// The sprint panel holds the practice text, not the stats, so leave
-		// panelDrawn false to keep the HUD on screen above it.
-		t.drawSprintPanel(x, y, width, height)
-		return
-	}
-	t.panelDrawn = true
 
 	contentRows := height - 2
-	topPad := 0
-	if height >= chatsuboFullHeight {
-		contentRows = height - 4
-		topPad = 1
-	}
 	if contentRows < 1 {
 		return
 	}
 
-	t.chatsubo.mu.Lock()
-	comment := t.chatsubo.comment
-	t.chatsubo.mu.Unlock()
-	if comment == "" {
-		comment = "jacked in. listening."
-	}
-
 	border := t.defaultStyle.Foreground(tcell.ColorTeal)
-	guideStyle := t.defaultStyle.Foreground(tcell.ColorTeal).Bold(true)
-	label := " chatsubo "
-	top := "╭" + label + strings.Repeat("─", width-2-len([]rune(label))) + "╮"
-	drawString(t.Scr, x, y, top, -1, border)
-
-	inner := width - 2
-	bodyCols := inner - 4 // two columns of padding on each side
-	if bodyCols < 1 {
-		return
+	// The rule runs through the title, so the label is always readable even
+	// when the box is only as wide as a short board.
+	label := " chatsubo"
+	if width >= 24 {
+		label = " chatsubo "
 	}
-	drawBoxLine := func(row int, text string, style tcell.Style) {
-		r := []rune(strings.Join(strings.Fields(text), " "))
-		if len(r) > bodyCols {
-			r = r[:bodyCols]
+	drawTopRule(t.Scr, x, y, width, label, border)
+	// In a sprint the countdown sits right-aligned in the rule: there is room
+	// above the board now that the panel is a band, not a gap between hands.
+	// panelLabel is " chatsubo Ns "; the countdown is what follows the title.
+	if t.sprint {
+		countdown := strings.TrimSpace(t.panelLabel)
+		countdown = strings.TrimSpace(strings.TrimPrefix(countdown, "chatsubo"))
+		if countdown != "" {
+			tail := []rune(countdown)
+			tx := x + width - 2 - len(tail)
+			minX := x + 1 + len([]rune(label))
+			if tx >= minX {
+				drawString(t.Scr, tx, y, countdown, -1, border.Bold(true))
+			}
 		}
-		line := "│  " + string(r) + strings.Repeat(" ", bodyCols-len(r)) + "  │"
-		drawString(t.Scr, x, row, line, -1, style)
 	}
+
 	drawBlank := func(row int) {
 		line := "│" + strings.Repeat(" ", width-2) + "│"
 		drawString(t.Scr, x, row, line, -1, t.defaultStyle)
 	}
 
-	// Body layout: guidance and commentary at the top, the live stats pinned
-	// to the last two rows of the box so the numbers never move.
-	statsRows := 0
-	if contentRows > 1 {
-		statsRows = 2
-	} else if contentRows == 1 {
-		statsRows = 1
-	}
-	textRows := contentRows - statsRows
-
-	row := y + 1
-	rowsLeft := textRows
-	if topPad > 0 && rowsLeft > 0 {
+	// The box body holds the practice text, which the typing loop draws over
+	// these rows after the frame. Leave the interior blank with its side
+	// borders so the text lands inside the box.
+	for row := y + 1; row < y+height-1; row++ {
 		drawBlank(row)
-		row++
-		rowsLeft--
 	}
+	drawString(t.Scr, x, y+height-1, "╰"+strings.Repeat("─", width-2)+"╯", -1, border)
+}
 
-	guidance := strings.Join(strings.Fields(t.hintText), " ")
-	if guidance != "" && rowsLeft > 0 {
-		drawBoxLine(row, chatsuboClipRunes(guidance, bodyCols), guideStyle)
-		row++
-		rowsLeft--
+// drawTopRule draws a panel's top border with the title set into the rule.
+func drawTopRule(scr tcell.Screen, x, y, width int, title string, style tcell.Style) {
+	if width < 2 {
+		return
 	}
-
-	comment = strings.Join(strings.Fields(comment), " ")
-	if comment == "" {
-		comment = "jacked in. listening."
+	line := make([]rune, width)
+	line[0], line[width-1] = '╭', '╮'
+	for i := 1; i < width-1; i++ {
+		line[i] = '─'
 	}
-	if rowsLeft > 0 {
-		for _, line := range strings.Split(wordWrap(comment, bodyCols), "\n") {
-			if rowsLeft == 0 {
-				break
-			}
-			drawBoxLine(row, strings.TrimSpace(line), t.defaultStyle)
-			row++
-			rowsLeft--
+	// A narrow box keeps the end of the title, which is the part that names
+	// the panel.
+	title = "─" + title + "─"
+	if tr := []rune(title); len(tr) > width-2 {
+		title = string(tr[len(tr)-(width-2):])
+	}
+	for i, r := range []rune(title) {
+		if 1+i >= width-1 {
+			break
 		}
+		line[1+i] = r
 	}
-	// Fill everything between the text and the stats so the side borders are
-	// continuous.
-	for row < y+height-1-statsRows {
-		drawBlank(row)
-		row++
-	}
-
-	// Stats at the bottom of the box: equalizer row, then the numbers.
-	// Stats sit on the last body rows, immediately above the bottom border.
-	statsRow := y + height - 2
-	if statsRows == 2 {
-		statsRow--
-		drawBlank(statsRow)
-		t.drawEqualizer(x+3, statsRow, bodyCols-1, 1, t.defaultStyle)
-		statsRow++
-	}
-	if statsRows >= 1 {
-		drawBlank(statsRow)
-		t.drawPanelStats(x+3, statsRow, bodyCols-1, t.curWpm, t.curCpm, t.curAcc, t.curErrs)
-	}
-	bottom := "╰" + strings.Repeat("─", width-2) + "╯"
-	drawString(t.Scr, x, y+height-1, bottom, -1, border)
+	drawString(scr, x, y, string(line), -1, style)
 }

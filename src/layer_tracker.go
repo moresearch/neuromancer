@@ -49,6 +49,14 @@ func (t *layerTracker) Layer() int {
 	return layer
 }
 
+// Pressed reports whether the physical matrix cell (row, col) is held down, so
+// a key with no action can still light up when the user presses it.
+func (t *layerTracker) Pressed(row, col int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.prevPressed[[2]int{row, col}]
+}
+
 func (t *layerTracker) setLayer(layer int) {
 	t.mu.Lock()
 	changed := t.layer != layer

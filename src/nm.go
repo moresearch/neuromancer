@@ -284,6 +284,8 @@ Test Parameters
     -highlightchars N   Highlight only the next N characters (spaces excluded)
                         instead of the current and next word. Useful for
                         drilling speed.
+    -wordbyword         Highlight only the word under the cursor; the rest of
+                        the text stays at the default style.
 
 Scripting
     -oneshot            Automatically exit after a single run.
@@ -343,6 +345,7 @@ func main() {
 	var noHighlightNext bool
 	var noHighlight bool
 	var highlightChars int
+	var wordByWord bool
 	var maxLineLen int
 	var noSkip bool
 	var noBackspace bool
@@ -414,6 +417,7 @@ func main() {
 	flag.BoolVar(&noHighlightCurrent, "highlight2", false, "")
 	flag.BoolVar(&noHighlightNext, "highlight1", false, "")
 	flag.IntVar(&highlightChars, "highlightchars", 0, "")
+	flag.BoolVar(&wordByWord, "wordbyword", false, "")
 	flag.BoolVar(&noReport, "noreport", false, "")
 	flag.BoolVar(&boldFlag, "bold", false, "")
 	flag.BoolVar(&csvMode, "csv", false, "")
@@ -674,6 +678,7 @@ func main() {
 	}
 
 	typer.HighlightChars = highlightChars
+	typer.WordByWord = wordByWord
 
 	if noHighlightNext || noHighlight {
 		typer.currentWordStyle = typer.nextWordStyle
@@ -703,11 +708,9 @@ func main() {
 	}
 	typer.sprint = booksSummary
 	if chatsuboMode {
-		if typer.sprint {
-			warnf("-chatsubo is disabled in book sprint mode")
-		} else {
-			typer.chatsubo = newChatsubo(ollamaURL, ollamaModel, chatsuboEvery, chatsuboLayoutSummary(vilKB))
-		}
+		// A sprint uses the same box as its top band, so -chatsubo works with
+		// -books; commentary is only requested outside a sprint.
+		typer.chatsubo = newChatsubo(ollamaURL, ollamaModel, chatsuboEvery, chatsuboLayoutSummary(vilKB))
 	}
 
 	reflow := func(s string) string {
@@ -715,22 +718,11 @@ func main() {
 		typer.layoutTop = -1
 		top := sh
 		wsz := maxLineLen
-		maxLines := 0
 
 		if m, ok := typer.keyboardMetrics(); ok {
 			top = m.top
 			if wsz == 0 {
 				wsz = typer.keyboardWidth(m)
-			}
-			if typer.sprint {
-				if _, _, w, rows, ok := typer.sprintTextArea(m); ok {
-					if maxLineLen == 0 || maxLineLen > w {
-						wsz = w
-					} else {
-						wsz = maxLineLen
-					}
-					maxLines = rows
-				}
 			}
 		}
 		if wsz == 0 {
@@ -742,13 +734,11 @@ func main() {
 		if wsz < 1 {
 			wsz = 1
 		}
-		if maxLines == 0 {
-			// Leave room for the gap above the splits and the attribution/
-			// timer line below the text.
-			maxLines = top - 2 - layoutSplitPad
-			if maxLines < 1 {
-				maxLines = 1
-			}
+		// Leave room for the gap above the splits and the attribution/
+		// timer line below the text.
+		maxLines := top - 2 - layoutSplitPad
+		if maxLines < 1 {
+			maxLines = 1
 		}
 		return trimText(s, wsz, maxLines)
 	}
